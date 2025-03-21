@@ -16,7 +16,7 @@ db = SQLAlchemy(app)
 
 class users(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False)
+    username = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(100), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)  
 
@@ -31,7 +31,7 @@ class users(db.Model):
 def register():
     data = request.get_json()
     print(data)
-    new_user = users(name=data['name'], email=data['email'])
+    new_user = users(username=data['username'], email=data['email'])
     new_user.set_password(data['password'])
     db.session.add(new_user)
     db.session.commit()
