@@ -14,6 +14,21 @@ db = SQLAlchemy(app)
 
 
 
+class UserTeams(db.Model):
+    __tablename__ = 'UserTeam'
+    team_id = db.Column('teamID', db.Integer, db.ForeignKey('Teams.id'), primary_key=True)
+    user_id = db.Column('userID', db.Integer, db.ForeignKey('Users.id'), primary_key=True)
+    role = db.Column(db.String(50))
+
+
+
+class Teams(db.Model):
+    __tablename__ = 'teams'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    creator = db.Column(db.String(100), nullable=True)
+
+
 class users(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(100), nullable=False)
@@ -46,7 +61,32 @@ def login():
     if user and user.check_password(data['password']):  
         return jsonify({"message": "Login successful!", "userID": user.id}), 200
     else:
-        return jsonify({"error": "Invalid email or password"}), 401
+         jsonify({"error": "Invalid email or password"}), 401
+
+from flask import request
+
+@app.route('/getTeams', methods=['GET'])
+def get_teams():
+    user_id = request.args.get('userID', type=int)
+    
+    if user_id is None:
+        return jsonify({"error": "userID is required"}), 400
+
+    results = db.session.query(Teams).join(UserTeams, Teams.id == UserTeams.team_id)\
+        .filter(UserTeams.user_id == user_id).all()
+    print(results)
+    teams = []
+    for team in results:
+        teams.append({
+            "id": team.id,
+            "name": team.name,
+            "creator": team.creator
+        })
+    print(teams)
+    return jsonify(teams), 200
+
+
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
