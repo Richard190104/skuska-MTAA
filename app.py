@@ -37,6 +37,13 @@ class User(db.Model):
 
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
+    
+class Invitation(db.Model):
+    __tablename__ = 'invitations'
+    id = db.Column(db.Integer, primary_key=True)
+    team_id = db.Column(db.Integer, db.ForeignKey('teams.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    status = db.Column(db.String(20), default='pending')
 
 
 @app.route('/register', methods=['POST'])
@@ -73,7 +80,7 @@ def get_teams():
         teams.append({
             "id": team.id,
             "name": team.name,
-            "creator_id": team.creator_id  # ✅ integer
+            "creator_id": team.creator_id
         })
 
     return jsonify(teams), 200
@@ -83,8 +90,9 @@ def get_teams():
 def create_team():
     data = request.get_json()
     name = data.get('name')
-    description = data.get('description')  # zatiaľ neukladáme
+    description = data.get('description')
     user_id = data.get('user_id')
+    member_emails = data.get('members', [])
 
     if not name or not user_id:
         return jsonify({"message": "Missing name or user ID"}), 400
@@ -93,24 +101,84 @@ def create_team():
     db.session.add(new_team)
     db.session.commit()
 
-    user_team = UserTeam(team_id=new_team.id, user_id=user_id, role="owner")
-    db.session.add(user_team)
+    owner_entry = UserTeam(team_id=new_team.id, user_id=user_id, role="owner")
+    db.session.add(owner_entry)
+
+    for email in member_emails:
+        user = User.query.filter_by(email=email).first()
+        if user:
+            invitation = Invitation(team_id=new_team.id, user_id=user.id, status='pending')
+            db.session.add(invitation)
+        else:
+            print(f"User with email {email} not found, skipping invitation.")
     db.session.commit()
 
     return jsonify({"message": "Team created successfully!"}), 201
 
-@app.route('/getTeamNames', methods=['GET'])
-def get_team_names():
-    user_id = request.args.get('userID', type=int)
+@app.route('/getInvitations', methods=['Get'])
+def get_invitations():
+    user_id = request.args.get('userId', type=int)
+
     if user_id is None:
-        return jsonify({"error": "userID is required"}), 400
+        return jsonify({"error": "Missing userID"}), 400
 
-    teams = db.session.query(Team.name)\
-        .join(UserTeam, Team.id == UserTeam.team_id)\
-        .filter(UserTeam.user_id == user_id).all()
+    invitations = db.session.query(
+        Invitation.id.label('invite_id'),
+        Team.name.label('team_name'),
+        User.username.label('creator_name')
+    ).join(Team, Invitation.team_id == Team.id)\
+     .join(User, Team.creator_id == User.id)\
+     .filter(Invitation.user_id == user_id, Invitation.status == 'pending')\
+     .all()
 
-    team_names = [name for (name,) in teams]
-    return jsonify(team_names), 200
+    invite_list = []
+    for invite in invitations:
+        invite_list.append({
+            "invite_id": invite.invite_id,
+            "team_name": invite.team_name,
+            "sender_name": invite.creator_name
+        })
+    
+    return jsonify(invite_list), 200
+
+@app.route('/acceptInvite', methods=['POST'])
+def accept_invite():
+    data = request.get_json()
+    invite_id =data.get('invite_id')
+
+    invitation = Invitation.query.filter_by(id=invite_id).first()
+
+    if not invitation:
+        return jsonify({"error": "Invitation not found"}), 404
+    
+    if invitation.status != 'pending':
+        return jsonify({"error": "Ivitation already handled"}), 400
+    
+    new_link = UserTeam(team_id=invitation.team_id, user_id=invitation.user_id, role='member')
+    db.session.add(new_link)
+
+    invitation.status = 'accepted'
+    db.session.commit()
+
+    return jsonify({"message": "Invitation accepted and user added to team"}), 200
+
+@app.route('/declineInvite', methods=['POST'])
+def decline_invite():
+    data = request.get_json()
+    invite_id =data.get('invite_id')
+
+    invitation = Invitation.query.filter_by(id=invite_id).first()
+
+    if not invitation:
+        return jsonify({"error": "Invitation not found"}), 404
+    
+    if invitation.status != 'pending':
+        return jsonify({"error": "Ivitation already handled"}), 400
+    
+    invitation.status = 'declined'
+    db.session.commit()
+
+    return jsonify({"message": "Invitation declined"}), 200
 
 
 if __name__ == '__main__':
