@@ -20,7 +20,7 @@ class UserTeam(db.Model):
 # ✅ teams – creator_id ako integer FK
 class Team(db.Model):
     __tablename__ = 'teams'
-    id = db.Column(db.Integer, primary_key=True)
+    id = db.Column(db.Integer, primary_key=True )
     name = db.Column(db.String(100), nullable=False)
     creator_id = db.Column(db.Integer, db.ForeignKey('users.id'))
 
@@ -44,6 +44,13 @@ class Invitation(db.Model):
     team_id = db.Column(db.Integer, db.ForeignKey('teams.id'), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     status = db.Column(db.String(20), default='pending')
+
+class Project(db.Model):
+    __tablename__ = 'projects'
+    id = db.Column(db.Integer, primary_key=True)
+    project_name = db.Column(db.String(100), nullable=False)
+    team_id = db.Column(db.Integer, db.ForeignKey('teams.id'), nullable=False)
+    deadline = db.Column(db.DateTime, nullable=True)
 
 
 @app.route('/register', methods=['POST'])
@@ -179,6 +186,72 @@ def decline_invite():
     db.session.commit()
 
     return jsonify({"message": "Invitation declined"}), 200
+
+
+@app.route('/getProjects', methods=['GET'])
+def get_projects():
+    team_id = request.args.get('teamID', type=int)
+
+    if team_id is None:
+        return jsonify({"error": "teamID is required"}), 400
+
+    projects = db.session.query(Project).filter_by(team_id=team_id).all()
+
+    project_list = []
+    for project in projects:
+        project_list.append({
+            "id": project.id,
+            "project_name": project.project_name,
+            "team_id": project.team_id
+        })
+
+    return jsonify(project_list), 200
+
+@app.route('/createProject', methods=['POST'])
+def create_project():
+    data = request.get_json()
+    project_name = data.get('name')
+    deadline = data.get('deadline')
+    team_id = data.get('team_id')
+    if not project_name or not team_id:
+        return jsonify({"error": "Missing project name or team ID"}), 400
+
+    try:
+        team_id = int(team_id)
+    except ValueError:
+        return jsonify({"error": "Invalid team ID"}), 400
+
+    new_project = Project(project_name=project_name, team_id=team_id, deadline=deadline)
+    db.session.add(new_project)
+    db.session.commit()
+
+    return jsonify({"message": "Project created successfully!"}), 201
+
+@app.route('/getTeamMembers', methods=['GET'])
+def get_team_members():
+    team_id = request.args.get('teamID', type=int)
+
+    if team_id is None:
+        return jsonify({"error": "teamID is required"}), 400
+
+    members = db.session.query(
+        User.id.label('user_id'),
+        User.username.label('username'),
+        User.email.label('email'),
+        UserTeam.role.label('role')
+    ).join(UserTeam, User.id == UserTeam.user_id)\
+        .filter(UserTeam.team_id == team_id).all()
+
+    member_list = []
+    for member in members:
+        member_list.append({
+            "user_id": member.user_id,
+            "username": member.username,
+            "email": member.email,
+            "role": member.role
+        })
+
+    return jsonify(member_list), 200
 
 
 if __name__ == '__main__':
