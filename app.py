@@ -253,6 +253,29 @@ def get_team_members():
 
     return jsonify(member_list), 200
 
+@app.route('/setInvite', methods=['POST'])
+def set_invite():
+    data = request.get_json()
+    email = data.get('email')
+    team_id = data.get('team')
+
+    if not email or not team_id:
+        return jsonify({"error": "Missing email or team ID"}), 400
+
+    user = User.query.filter_by(email=email).first()
+    if not user:
+        return jsonify({"error": "User with the provided email not found"}), 404
+
+    try:
+        team_id = int(team_id)
+    except ValueError:
+        return jsonify({"error": "Invalid team ID"}), 400
+
+    new_invitation = Invitation(team_id=team_id, user_id=user.id, status='pending')
+    db.session.add(new_invitation)
+    db.session.commit()
+
+    return jsonify({"message": "Invitation created successfully!"}), 201
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
