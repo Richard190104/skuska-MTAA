@@ -2,6 +2,10 @@ from flask import Flask, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
+from datetime import datetime
+from flask_socketio import SocketIO
+from flask_socketio import emit
+from flask_socketio import join_room
 
 app = Flask(__name__)
 CORS(app)
@@ -10,21 +14,20 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 
-# ✅ user_teams – FK správne viazané na integer ID
+socketio = SocketIO(app, cors_allowed_origins='*')
+
 class UserTeam(db.Model):
     __tablename__ = 'user_teams'
     team_id = db.Column(db.Integer, db.ForeignKey('teams.id'), primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), primary_key=True)
     role = db.Column(db.String(50))
 
-# ✅ teams – creator_id ako integer FK
 class Team(db.Model):
     __tablename__ = 'teams'
     id = db.Column(db.Integer, primary_key=True )
     name = db.Column(db.String(100), nullable=False)
     creator_id = db.Column(db.Integer, db.ForeignKey('users.id'))
 
-# ✅ users – všetko integer ID
 class User(db.Model):
     __tablename__ = 'users'
     id = db.Column(db.Integer, primary_key=True)
@@ -51,6 +54,14 @@ class Project(db.Model):
     project_name = db.Column(db.String(100), nullable=False)
     team_id = db.Column(db.Integer, db.ForeignKey('teams.id'), nullable=False)
     deadline = db.Column(db.DateTime, nullable=True)
+
+class Message(db.Model):
+    __tablename__ = 'messages'
+    id = db.Column(db.Integer, primary_key=True)
+    message = db.Column(db.Text, nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    team_id = db.Column(db.Integer, db.ForeignKey('teams.id'), nullable=False)
+    date = db.Column(db.DateTime, default=datetime.utcnow)
 
 
 @app.route('/register', methods=['POST'])
@@ -277,5 +288,59 @@ def set_invite():
 
     return jsonify({"message": "Invitation created successfully!"}), 201
 
+@socketio.on('join')
+def on_join(data):
+    team_id = data.get('team_id')
+    join_room(f"team_{team_id}")
+
+@socketio.on('send_message')
+def handle_message(data):
+    sender_id = data['sender_id']
+    team_id = data['team_id']
+    content = data['content']
+
+    user = User.query.get(sender_id)
+    sender_name = user.username if user else "Unknwon"
+
+    msg = Message(user_id=sender_id, team_id=team_id, message=content)
+    db.session.add(msg)
+    db.session.commit()
+
+    room = f"team_{team_id}"
+    emit('receive_message', {
+        'sender_id': sender_id,
+        'team_id': team_id,
+        'content': content,
+        'date': msg.date.isoformat(),
+    }, room=room)
+
+@app.route('/getMessages', methods=['GET'])
+def get_messages():
+    team_id = request.args.get('teamID', type=int)
+    offset = request.args.get('offset', default=0, type=int)
+    limit = request.args.get('limit', default=20, type=int)
+
+    if not team_id:
+        return jsonify({"error": "Missing teamID"}), 400
+    
+    messages = db.session.query(Message, User.username)\
+        .join(User, Message.user_id == User.id)\
+        .filter(Message.team_id == team_id)\
+        .order_by(Message.date.desc())\
+        .offset(offset)\
+        .limit(limit)\
+        .all()
+    
+    result = [{
+        "id": msg.Message.id,
+        "content": msg.Message.message,
+        "sender_id": msg.Message.user_id,
+        "sender_name": msg.username,
+        "team_id": msg.Message.team_id,
+        "date": msg.Message.date.isoformat()
+    } for msg in reversed(messages)]
+
+    return jsonify(result), 200
+
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    socketio.run(app, host='0.0.0.0', port=5000, debug=True)
