@@ -63,6 +63,15 @@ class Message(db.Model):
     team_id = db.Column(db.Integer, db.ForeignKey('teams.id'), nullable=False)
     date = db.Column(db.DateTime, default=datetime.utcnow)
 
+class Task(db.Model):
+    __tablename__ = 'tasks'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    completed = db.Column(db.Boolean, default=False)
+    deadline = db.Column(db.DateTime, nullable=True)
+    project_id = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=False)
+
 
 @app.route('/register', methods=['POST'])
 def register():
@@ -213,7 +222,8 @@ def get_projects():
         project_list.append({
             "id": project.id,
             "project_name": project.project_name,
-            "team_id": project.team_id
+            "team_id": project.team_id,
+            "deadline": project.deadline.isoformat() if project.deadline else None
         })
 
     return jsonify(project_list), 200
@@ -341,6 +351,27 @@ def get_messages():
     } for msg in reversed(messages)]
 
     return jsonify(result), 200
+
+@app.route('/getProjectTasks', methods=['GET'])
+def get_project_tasks():
+    project_id = request.args.get('projectID', type=int)
+
+    if project_id is None:
+        return jsonify({"error": "projectID is required"}), 400
+
+    tasks = db.session.query(Task).filter_by(project_id=project_id).all()
+
+    task_list = []
+    for task in tasks:
+        task_list.append({
+            "id": task.id,
+            "name": task.name,
+            "description": task.description,
+            "completed": task.completed,
+            "deadline": task.deadline.isoformat() if task.deadline else None
+        })
+
+    return jsonify(task_list), 200
 
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=5000, debug=True)
