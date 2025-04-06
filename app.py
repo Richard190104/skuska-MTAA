@@ -71,6 +71,7 @@ class Task(db.Model):
     completed = db.Column(db.Boolean, default=False)
     deadline = db.Column(db.DateTime, nullable=True)
     project_id = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=False)
+    parent_task_id = db.Column(db.Integer, db.ForeignKey('tasks.id'), nullable=True)
 
 
 @app.route('/register', methods=['POST'])
@@ -368,7 +369,8 @@ def get_project_tasks():
             "name": task.name,
             "description": task.description,
             "completed": task.completed,
-            "deadline": task.deadline.isoformat() if task.deadline else None
+            "deadline": task.deadline.isoformat() if task.deadline else None,
+            "parent_task_id": task.parent_task_id
         })
 
     return jsonify(task_list), 200
