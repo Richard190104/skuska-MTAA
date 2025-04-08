@@ -2,12 +2,15 @@ from flask import Flask, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask_socketio import SocketIO
 from flask_socketio import emit
 from flask_socketio import join_room
+import jwt
+from functools import wraps
 
 app = Flask(__name__)
+app.config['SECRET_KEY'] = 'm7u2p$9a1r!b#x@z&k8w'
 CORS(app)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:Bhmk7gh90r@localhost:5432/MTAAskuska'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -73,6 +76,32 @@ class Task(db.Model):
     project_id = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=False)
     parent_task_id = db.Column(db.Integer, db.ForeignKey('tasks.id'), nullable=True)
 
+def token_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = None
+
+        if 'Authorization' in request.headers:
+            auth_header = request.headers['Authorization']
+            if auth_header.startswith('Bearer '):
+                token = auth_header.split(' ')[1]
+
+        if not token:
+            return jsonify({'error': 'Token is missing!'}), 401
+
+        try:
+            data = jwt.decode(token, app.config['SECRET_KEY'], algorithms=["HS256"])
+            current_user = User.query.get(data['user_id'])
+            if not current_user:
+                raise Exception('User not found')
+        except Exception as e:
+            return jsonify({'error': 'Token is invalid!'}), 401
+
+        return f(current_user, *args, **kwargs)
+
+    return decorated
+
+
 
 @app.route('/register', methods=['POST'])
 def register():
@@ -89,9 +118,19 @@ def login():
     data = request.get_json()
     user = User.query.filter_by(email=data['email']).first()
     if user and user.check_password(data['password']):
-        return jsonify({"message": "Login successful!", "userID": user.id}), 200
+        token = jwt.encode({
+            'user_id': user.id,
+            'exp': datetime.utcnow() + timedelta(hours=6)
+        }, app.config['SECRET_KEY'], algorithm='HS256')
+
+        return jsonify({
+            "message": "Login successful!",
+            "token": token,
+            "userID": user.id
+        }), 200
     else:
         return jsonify({"error": "Invalid email or password"}), 401
+
 
 
 @app.route('/getTeams', methods=['GET'])
@@ -374,6 +413,26 @@ def get_project_tasks():
         })
 
     return jsonify(task_list), 200
+
+@app.route('/removeTeamMember', methods=['DELETE'])
+@token_required
+def remove_team_member(current_user):
+    data = request.get_json()
+    user_id = data.get('user_id')
+    team_id = data.get('team_id')
+
+    if not user_id or not team_id:
+        return jsonify({"error": "Missing user_id or team_id"}), 400
+
+    user_team = UserTeam.query.filter_by(user_id=user_id, team_id=team_id).first()
+
+    if not user_team:
+        return jsonify({"error": "User is not a member of the team"}), 404
+
+    db.session.delete(user_team)
+    db.session.commit()
+
+    return jsonify({"message": "User removed from the team successfully"}), 200
 
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=5000, debug=True)
