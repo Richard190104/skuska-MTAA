@@ -73,6 +73,7 @@ class Task(db.Model):
     description = db.Column(db.Text, nullable=True)
     completed = db.Column(db.Boolean, default=False)
     deadline = db.Column(db.DateTime, nullable=True)
+    assigned_to = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     project_id = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=False)
     parent_task_id = db.Column(db.Integer, db.ForeignKey('tasks.id'), nullable=True)
 
@@ -408,6 +409,7 @@ def get_project_tasks():
             "name": task.name,
             "description": task.description,
             "completed": task.completed,
+            "assigned_to": task.assigned_to,
             "deadline": task.deadline.isoformat() if task.deadline else None,
             "parent_task_id": task.parent_task_id
         })
@@ -433,6 +435,43 @@ def remove_team_member(current_user):
     db.session.commit()
 
     return jsonify({"message": "User removed from the team successfully"}), 200
+
+@app.route('/createTask', methods=['POST'])
+@token_required
+def create_task(current_user):
+    data = request.get_json()
+    name = data.get('name')
+    description = data.get('description')
+    assigned_to = data.get('assign')
+    deadline = data.get('deadline')
+    project_id = data.get('project_id')
+    parent_task_id = data.get('parent_task_id')
+
+    if not name or not project_id:
+        return jsonify({"error": "Missing task name or project ID"}), 400
+
+    try:
+        project_id = int(project_id)
+        if assigned_to:
+            assigned_to = int(assigned_to)
+        if parent_task_id:
+            parent_task_id = int(parent_task_id)
+    except ValueError:
+        return jsonify({"error": "Invalid project ID, assigned_to, or parent_task_id"}), 400
+
+    new_task = Task(
+        name=name,
+        description=description,
+        assigned_to=assigned_to,
+        deadline=deadline,
+        completed=False,
+        project_id=project_id,
+        parent_task_id=parent_task_id
+    )
+    db.session.add(new_task)
+    db.session.commit()
+
+    return jsonify({"message": "Task created successfully!", "task_id": new_task.id}), 201
 
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=5000, debug=True)
