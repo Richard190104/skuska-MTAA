@@ -8,12 +8,14 @@ from flask_socketio import emit
 from flask_socketio import join_room
 import jwt
 from functools import wraps
+from flasgger import Swagger
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'm7u2p$9a1r!b#x@z&k8w'
 CORS(app)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:Bhmk7gh90r@localhost:5432/MTAAskuska'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+swagger = Swagger(app)
 
 db = SQLAlchemy(app)
 
@@ -106,6 +108,32 @@ def token_required(f):
 
 @app.route('/register', methods=['POST'])
 def register():
+    """
+    Register a new user
+    ---
+    tags:
+      - Auth
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - username
+            - email
+            - password
+          properties:
+            username:
+              type: string
+            email:
+              type: string
+            password:
+              type: string
+    responses:
+      201:
+        description: User registered successfully
+    """
     data = request.get_json()
     new_user = User(username=data['username'], email=data['email'])
     new_user.set_password(data['password'])
@@ -116,6 +144,31 @@ def register():
 
 @app.route('/login', methods=['POST'])
 def login():
+    """
+    Authenticate user and return a JWT token
+    ---
+    tags:
+      - Auth
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - email
+            - password
+          properties:
+            email:
+              type: string
+            password:
+              type: string
+    responses:
+      200:
+        description: Login successful
+      401:
+        description: Invalid credentials
+    """
     data = request.get_json()
     user = User.query.filter_by(email=data['email']).first()
     if user and user.check_password(data['password']):
@@ -136,6 +189,21 @@ def login():
 
 @app.route('/getTeams', methods=['GET'])
 def get_teams():
+    """
+    Get all teams for a user
+    ---
+    tags:
+      - Teams
+    parameters:
+      - name: userID
+        in: query
+        type: integer
+        required: true
+        description: ID of the user
+    responses:
+      200:
+        description: List of teams
+    """
     user_id = request.args.get('userID', type=int)
     if user_id is None:
         return jsonify({"error": "userID is required"}), 400
@@ -156,6 +224,38 @@ def get_teams():
 
 @app.route('/createTeam', methods=['POST'])
 def create_team():
+    """
+    Create a new team and send invitations
+    ---
+    tags:
+      - Teams
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - name
+            - user_id
+          properties:
+            name:
+              type: string
+            description:
+              type: string
+            user_id:
+              type: integer
+            members:
+              type: array
+              items:
+                type: string
+    responses:
+      201:
+        description: Team created successfully
+      400:
+        description: Missing name or user ID
+    """
+
     data = request.get_json()
     name = data.get('name')
     description = data.get('description')
@@ -183,8 +283,24 @@ def create_team():
 
     return jsonify({"message": "Team created successfully!"}), 201
 
-@app.route('/getInvitations', methods=['Get'])
+@app.route('/getInvitations', methods=['GET'])
 def get_invitations():
+    """
+    Get pending invitations for a user
+    ---
+    tags:
+      - Invitations
+    parameters:
+      - name: userId
+        in: query
+        type: integer
+        required: true
+        description: User ID to fetch invitations
+    responses:
+      200:
+        description: List of pending invitations
+    """
+
     user_id = request.args.get('userId', type=int)
 
     if user_id is None:
@@ -211,6 +327,31 @@ def get_invitations():
 
 @app.route('/acceptInvite', methods=['POST'])
 def accept_invite():
+    """
+    Accept a team invitation
+    ---
+    tags:
+      - Invitations
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - invite_id
+          properties:
+            invite_id:
+              type: integer
+    responses:
+      200:
+        description: Invitation accepted and user added to team
+      404:
+        description: Invitation not found
+      400:
+        description: Invitation already handled
+    """
+
     data = request.get_json()
     invite_id =data.get('invite_id')
 
@@ -232,6 +373,31 @@ def accept_invite():
 
 @app.route('/declineInvite', methods=['POST'])
 def decline_invite():
+    """
+    Decline a team invitation
+    ---
+    tags:
+      - Invitations
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - invite_id
+          properties:
+            invite_id:
+              type: integer
+    responses:
+      200:
+        description: Invitation declined
+      404:
+        description: Invitation not found
+      400:
+        description: Invitation already handled
+    """
+
     data = request.get_json()
     invite_id =data.get('invite_id')
 
@@ -251,6 +417,22 @@ def decline_invite():
 
 @app.route('/getProjects', methods=['GET'])
 def get_projects():
+    """
+    Get all projects for a team
+    ---
+    tags:
+      - Projects
+    parameters:
+      - name: teamID
+        in: query
+        type: integer
+        required: true
+        description: ID of the team
+    responses:
+      200:
+        description: List of projects
+    """
+
     team_id = request.args.get('teamID', type=int)
 
     if team_id is None:
@@ -271,6 +453,35 @@ def get_projects():
 
 @app.route('/createProject', methods=['POST'])
 def create_project():
+    """
+    Create a new project
+    ---
+    tags:
+      - Projects
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - name
+            - team_id
+          properties:
+            name:
+              type: string
+            deadline:
+              type: string
+              format: date-time
+            team_id:
+              type: integer
+    responses:
+      201:
+        description: Project created successfully
+      400:
+        description: Missing project name or team ID
+    """
+
     data = request.get_json()
     project_name = data.get('name')
     deadline = data.get('deadline')
@@ -291,6 +502,22 @@ def create_project():
 
 @app.route('/getTeamMembers', methods=['GET'])
 def get_team_members():
+    """
+    Get all members of a team
+    ---
+    tags:
+      - Teams
+    parameters:
+      - name: teamID
+        in: query
+        type: integer
+        required: true
+        description: Team ID
+    responses:
+      200:
+        description: List of team members
+    """
+
     team_id = request.args.get('teamID', type=int)
 
     if team_id is None:
@@ -314,9 +541,36 @@ def get_team_members():
         })
 
     return jsonify(member_list), 200
-
 @app.route('/setInvite', methods=['POST'])
 def set_invite():
+    """
+    Send invitation to a user via email
+    ---
+    tags:
+      - Invitations
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - email
+            - team
+          properties:
+            email:
+              type: string
+            team:
+              type: integer
+    responses:
+      201:
+        description: Invitation created successfully
+      400:
+        description: Missing email or team ID
+      404:
+        description: User with provided email not found
+    """
+
     data = request.get_json()
     email = data.get('email')
     team_id = data.get('team')
@@ -367,6 +621,32 @@ def handle_message(data):
 
 @app.route('/getMessages', methods=['GET'])
 def get_messages():
+    """
+    Get messages for a team
+    ---
+    tags:
+      - Messages
+    parameters:
+      - name: teamID
+        in: query
+        type: integer
+        required: true
+        description: Team ID
+      - name: offset
+        in: query
+        type: integer
+        required: false
+        description: Pagination offset
+      - name: limit
+        in: query
+        type: integer
+        required: false
+        description: Max messages to return
+    responses:
+      200:
+        description: List of messages
+    """
+
     team_id = request.args.get('teamID', type=int)
     offset = request.args.get('offset', default=0, type=int)
     limit = request.args.get('limit', default=20, type=int)
@@ -395,6 +675,22 @@ def get_messages():
 
 @app.route('/getProjectTasks', methods=['GET'])
 def get_project_tasks():
+    """
+    Get all tasks for a project
+    ---
+    tags:
+      - Tasks
+    parameters:
+      - name: projectID
+        in: query
+        type: integer
+        required: true
+        description: ID of the project
+    responses:
+      200:
+        description: List of tasks
+    """
+
     project_id = request.args.get('projectID', type=int)
 
     if project_id is None:
@@ -419,6 +715,34 @@ def get_project_tasks():
 @app.route('/removeTeamMember', methods=['DELETE'])
 @token_required
 def remove_team_member(current_user):
+    """
+    Remove a user from a team
+    ---
+    tags:
+      - Teams
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - user_id
+            - team_id
+          properties:
+            user_id:
+              type: integer
+            team_id:
+              type: integer
+    responses:
+      200:
+        description: User removed successfully
+      400:
+        description: Missing user_id or team_id
+      404:
+        description: User is not a member
+    """
+
     data = request.get_json()
     user_id = data.get('user_id')
     team_id = data.get('team_id')
@@ -439,6 +763,41 @@ def remove_team_member(current_user):
 @app.route('/createTask', methods=['POST'])
 @token_required
 def create_task(current_user):
+    """
+    Create a task in a project
+    ---
+    tags:
+      - Tasks
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - name
+            - project_id
+          properties:
+            name:
+              type: string
+            description:
+              type: string
+            assign:
+              type: integer
+            deadline:
+              type: string
+              format: date-time
+            project_id:
+              type: integer
+            parent_task_id:
+              type: integer
+    responses:
+      201:
+        description: Task created successfully
+      400:
+        description: Missing task name or project ID
+    """
+
     data = request.get_json()
     name = data.get('name')
     description = data.get('description')
