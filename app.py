@@ -7,6 +7,7 @@ from flask_socketio import SocketIO
 from flask_socketio import emit
 from flask_socketio import join_room
 import jwt
+import requests
 from functools import wraps
 from flasgger import Swagger
 
@@ -20,6 +21,9 @@ swagger = Swagger(app)
 db = SQLAlchemy(app)
 
 socketio = SocketIO(app, cors_allowed_origins='*')
+
+FCM_SERVER_KEY = "TU_VLOŽ_SERVER_KĽÚČ_Z_FIREBASE"
+FCM_SEND_ENDPOINT = "https://fcm.googleapis.com/fcm/send"
 
 class UserTeam(db.Model):
     __tablename__ = 'user_teams'
@@ -78,6 +82,17 @@ class Task(db.Model):
     assigned_to = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     project_id = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=False)
     parent_task_id = db.Column(db.Integer, db.ForeignKey('tasks.id'), nullable=True)
+
+class DeviceToken(db.Model):
+    __tablename__ = 'device_tokens'
+    id = db.Column(db.Integer, primary_key=True)
+    token = db.Column(db.String(255), unique=True, nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = db.relationship('User', backref=db.backref('device_tokens', lazy=True))
 
 def token_required(f):
     @wraps(f)
@@ -619,6 +634,14 @@ def handle_message(data):
         'date': msg.date.isoformat(),
     }, room=room)
 
+    fcm_tokens = get_active_tokens_for_team(team_id, exclude_user_id=sender_id)
+    send_push_notification(
+        fcm_tokens,
+        title=f"Message from {sender_name}",
+        body=content[:100] + ("..." if len(content) > 100 else ""),
+        data={"team_id": str(team_id), "type": "chat_message"}
+    )
+
 @app.route('/getMessages', methods=['GET'])
 def get_messages():
     """
@@ -831,6 +854,137 @@ def create_task(current_user):
     db.session.commit()
 
     return jsonify({"message": "Task created successfully!", "task_id": new_task.id}), 201
+
+
+@app.route('/register_token', methods=['POST'])
+@token_required
+def register_token(current_user):
+    """
+    Register or reactivate an FCM token for the current user
+    ---
+    tags:
+      - Notifications
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - token
+          properties:
+            token:
+              type: string
+              description: The FCM device token to register or reactivate
+    responses:
+      200:
+        description: FCM token registered or reactivated
+      400:
+        description: Token is required
+    """
+
+    data = request.get_json()
+    token = data.get('token')
+
+    if not token:
+        return jsonify({'error': 'Token is required'}), 400
+    
+    existing = DeviceToken.query.filter_by(token=token).first()
+
+    if existing:
+        existing.user_id = current_user.id
+        existing.is_active = True
+    else:
+        new_token = DeviceToken(token=token, user_id=current_user.id, is_active=True)
+        db.session.add(new_token)
+
+    db.session.commit()
+
+    return jsonify({'message': 'FCM token registered or reactivated'}), 200
+
+
+@app.route('/device_token/<string:token>', methods=['PUT'])
+@token_required
+def update_device_token(current_user, token):
+    """
+    Update FCM device token status (activate/deactivate)
+    ---
+    tags:
+      - Notifications
+    parameters:
+      - name: token
+        in: path
+        required: true
+        type: string
+        description: The FCM token to update
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - is_active
+          properties:
+            is_active:
+              type: boolean
+              description: Whether the token is active (True) or deactivated (False)
+    responses:
+      200:
+        description: Token updated successfully
+      400:
+        description: Missing is_active value
+      404:
+        description: Token not found
+    """
+    data = request.get_json()
+    is_active = data.get('is_active')
+
+    if is_active is None:
+        return jsonify({'error': 'Missing is-active value'}), 400
+    
+    token_record = DeviceToken.query.filter_by(token=token, user_id=current_user.id).first()
+
+    if not token_record:
+        return jsonify({'error': 'Token not found'}), 404
+    
+    token_record.is_active = is_active
+    token_record.update_at = datetime.utcnow()
+
+    db.session.commit()
+
+    return jsonify({'message': 'Token updated successfully'}), 200
+
+def get_active_tokens_for_team(team_id, exclude_user_id=None):
+    query = db.session.query(DeviceToken.token)\
+        .join(UserTeam, DeviceToken.user_id == UserTeam.user_id)\
+        .filter(UserTeam.team_id == team_id, DeviceToken.is_active == True)
+
+    if exclude_user_id:
+        query = query.filter(DeviceToken.user_id != exclude_user_id)
+
+    return [row.token for row in query.all()]
+
+def send_push_notification(fcm_tokens, title, body, data=None):
+    if not fcm_tokens:
+        return
+    
+    headers = {
+        "Authorization": f"key={FCM_SERVER_KEY}",
+        "Content-Type": "application/json"
+    }
+
+    payload = {
+        "registration_ids": fcm_tokens,
+        "notification": {
+            "title": title,
+            "body": body
+        },
+        "data": data or {}
+    }
+
+    response = requests.post(FCM_SEND_ENDPOINT, json=payload, headers=headers)
+    if response.status_code != 200:
+        print("FCM Error:", response.status_code, response.text)
 
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=5000, debug=True)
