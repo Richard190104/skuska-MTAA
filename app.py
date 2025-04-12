@@ -12,6 +12,9 @@ from functools import wraps
 from flasgger import Swagger
 import firebase_admin
 from firebase_admin import credentials, messaging
+import random
+import smtplib
+from email.mime.text import MIMEText
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'm7u2p$9a1r!b#x@z&k8w'
@@ -26,6 +29,8 @@ socketio = SocketIO(app, cors_allowed_origins='*')
 
 cred = credentials.Certificate("mtaaprojekt-b3546464b2d5.json")
 firebase_admin.initialize_app(cred)
+SMTP_EMAIL="mtaaprojekt@gmail.com"
+SMTP_PASSWORD="vjos ulgj qkyw kzf"
 
 
 class UserTeam(db.Model):
@@ -96,6 +101,13 @@ class DeviceToken(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     user = db.relationship('User', backref=db.backref('device_tokens', lazy=True))
+
+class PasswordResetCode(db.Model):
+    __tablename__ = 'password_reset_codes'
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(100), nullable=False)
+    code = db.Column(db.String(6), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 def token_required(f):
     @wraps(f)
@@ -1049,6 +1061,181 @@ def modify_task_status(current_user):
     db.session.commit()
 
     return jsonify({"message": "Task status updated successfully"}), 200
+
+def send_reset_email(email, code):
+    sender_email = SMTP_EMAIL
+    sender_password = SMTP_PASSWORD
+    smtp_server = "smtp.gmail.com"
+    smtp_port = 587
+
+    subejct = "Your Password Reset Code"
+    body = f"Here is your password reset code: {code}"
+
+    msg = MIMEText(body)
+    msg['Subject'] = subejct
+    msg['From'] = sender_email
+    msg['To'] = email
+
+    with smtplib.SMTP(smtp_server, smtp_port) as server:
+        server.starttls()
+        server.login(sender_email, sender_password)
+        server.sendd_message(msg)
+
+    print(f"Reset code sent to {email}")
+
+
+@app.route('/requestPasswordReset', methods=['POST'])
+def request_password_reset():
+    """
+    Request a password reset code via email
+    ---
+    tags:
+      - Auth
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - email
+          properties:
+            email:
+              type: string
+    responses:
+      200:
+        description: Code sent if user exists
+      400:
+        description: Email is required
+    """
+    data = request.get_json()
+    email = data.get('email')
+
+    if not email:
+        return jsonify({'error': 'Email is required'}), 400
+    
+    user = User.query.filter_by(email=email).first()
+    if not user:
+        return jsonify({'message': 'If the email exists, a reset code has been sent.'}), 200
+    
+    code = str(random.randint(100000, 999999))
+
+    reset_entry = PasswordResetCode(email=email, code=code)
+    db.session.add(reset_entry)
+    db.session.commit()
+
+    try:
+        send_reset_email(email, code)
+    except Exception as e:
+        print(f"Error sending email. {e}")
+        return jsonify({'error': 'Failed to send reset email'}), 500
+    
+    return jsonify({'message': 'If the email exists, a reset code has been sent.'}), 200
+
+@app.route('/verifyResetCode', methods=['POST'])
+def verify_reset_code():
+    """
+    Verify password reset code
+    ---
+    tags:
+      - Auth
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - email
+            - code
+          properties:
+            email:
+              type: string
+            code:
+              type: string
+    responses:
+      200:
+        description: Code verified successfully
+      400:
+        description: Invalid or expired code
+    """
+    data = request.get_json()
+    email = data.get('email')
+    code = data.get('code')
+
+    if not email or not code:
+        return jsonify({'error': 'Email and code are required'}), 400
+    
+    entry = PasswordResetCode.query.filter_by(email=email, code=code)\
+      .order_by(PasswordResetCode.created_at.desc()).first()
+    
+    time_diff = datetime.utcnow() - entry.created_at
+    if time_diff.total_seconds() > 900:
+        return jsonify({'error': 'Code expired'}), 400
+    
+    return jsonify({'message': 'Code verified'}), 200
+
+@app.route('/resetPassword', methods=['PUT'])
+def reset_password():
+    """
+    Reset password with a verified reset code
+    ---
+    tags:
+      - Auth
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - email
+            - code
+            - new_password
+          properties:
+            email:
+              type: string
+            code:
+              type: string
+            new_password:
+              type: string
+    responses:
+      200:
+        description: Password reset successful
+      400:
+        description: Invalid or expired code
+      404:
+        description: User not found
+    """
+    data = request.get_json()
+    email = data.get('email')
+    code = data.get('code')
+    new_password = data.get('new_password')
+
+    if not email or not code or not new_password:
+        return jsonify({'error': 'Missing email, code or new password'}), 400
+
+    reset_entry = PasswordResetCode.query.filter_by(email=email, code=code)\
+      .order_by(PasswordResetCode.created_at.desc()).first()
+    
+    if not reset_entry:
+        return jsonify({'error': 'Invalid code'}), 400
+    
+    if (datetime.utcnow() - reset_entry.created_at).total_seconds() > 900:
+        return jsonify({'error': 'Code expired'}), 400
+    
+    user = User.query.filter_by(email=email).first()
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+    
+    user.set_password(new_password)
+    db.session.commit()
+
+    db.session.delete(reset_entry)
+    db.session.commit()
+
+    return jsonify({'message': 'Password has been reset successfully'}), 200
+
 
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=5000, debug=True)
