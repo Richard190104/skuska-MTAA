@@ -70,7 +70,7 @@ class User(db.Model):
     username = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(100), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
-
+    profile_picture = db.Column(db.LargeBinary, nullable=True)
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
 
@@ -282,7 +282,10 @@ def login():
         return jsonify({
             "message": "Login successful!",
             "token": token,
-            "userID": user.id
+            "userID": user.id,
+            "username": user.username,
+            "email": user.email,
+            "profile_picture": user.profile_picture.decode() if user.profile_picture else None
         }), 200
     else:
         return jsonify({"error": "Invalid email or password"}), 401
@@ -654,6 +657,7 @@ def get_team_members(current_user):
         User.id.label('user_id'),
         User.username.label('username'),
         User.email.label('email'),
+        User.profile_picture.label('profile_picture'),
         UserTeam.role.label('role')
     ).join(UserTeam, User.id == UserTeam.user_id)\
         .filter(UserTeam.team_id == team_id).all()
@@ -664,7 +668,8 @@ def get_team_members(current_user):
             "user_id": member.user_id,
             "username": member.username,
             "email": member.email,
-            "role": member.role
+            "role": member.role,
+            "profile_picture": member.profile_picture.decode() if member.profile_picture else None
         })
 
     return jsonify(member_list), 200
@@ -1409,6 +1414,62 @@ def modify_user_role(current_user):
     db.session.commit()
 
     return jsonify({"message": "User role updated successfully"}), 200
+
+@app.route('/updateProfilePicture', methods=['PUT'])
+@token_required
+def update_profile_picture(current_user):
+    """
+    Update the profile picture of a user
+    ---
+    tags:
+        - Users
+    security:
+        - Bearer: [] 
+    parameters:
+        - in: body
+        name: body
+        required: true
+        schema:
+            type: object
+            required:
+            - userId
+            - profilePicture
+            properties:
+            userId:
+                type: integer
+            profilePicture:
+                type: string
+                description: Base64 encoded image
+    responses:
+        200:
+        description: Profile picture updated successfully
+        400:
+        description: Missing userId or profilePicture
+        404:
+        description: User not found
+    """
+    data = request.get_json()
+    user_id = data.get('userId')
+    profile_picture = data.get('profilePicture')
+
+    if not user_id or not profile_picture:
+        return jsonify({"error": "Missing userId or profilePicture"}), 400
+
+    user = User.query.filter_by(id=user_id).first()
+
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    try:
+        user.profile_picture = profile_picture.encode('utf-8')
+        db.session.commit()
+    except Exception as e:
+        return jsonify({"error": f"Failed to update profile picture: {str(e)}"}), 500
+
+    return jsonify({
+        "message": "Profile picture updated successfully",
+        "profile_picture": user.profile_picture.decode('utf-8') if user.profile_picture else None
+    }), 200
 
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=5000, debug=True)
