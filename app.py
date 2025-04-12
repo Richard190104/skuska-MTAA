@@ -46,8 +46,8 @@ db = SQLAlchemy(app)
 
 socketio = SocketIO(app, cors_allowed_origins='*')
 
-cred = credentials.Certificate("mtaaprojekt-b3546464b2d5.json")
-firebase_admin.initialize_app(cred)
+# cred = credentials.Certificate("mtaaprojekt-b3546464b2d5.json")
+# firebase_admin.initialize_app(cred)
 SMTP_EMAIL="mtaaprojekt@gmail.com"
 SMTP_PASSWORD="vjos ulgj qkyw kzf"
 
@@ -329,7 +329,7 @@ def get_teams(current_user):
 
 @app.route('/createTeam', methods=['POST'])
 @token_required
-def create_team():
+def create_team(current_user):
     """
     Create a new team and send invitations
     ---
@@ -393,7 +393,7 @@ def create_team():
 
 @app.route('/getInvitations', methods=['GET'])
 @token_required
-def get_invitations():
+def get_invitations(current_user):
     """
     Get pending invitations for a user
     ---
@@ -438,7 +438,7 @@ def get_invitations():
 
 @app.route('/acceptInvite', methods=['POST'])
 @token_required
-def accept_invite():
+def accept_invite(current_user):
     """
     Accept a team invitation
     ---
@@ -487,7 +487,7 @@ def accept_invite():
 
 @app.route('/declineInvite', methods=['POST'])
 @token_required
-def decline_invite():
+def decline_invite(current_user):
     """
     Decline a team invitation
     ---
@@ -760,7 +760,7 @@ def handle_message(data):
 
 @app.route('/getMessages', methods=['GET'])
 @token_required
-def get_messages():
+def get_messages(current_user):
     """
     Get messages for a team
     ---
