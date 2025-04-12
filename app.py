@@ -18,14 +18,33 @@ app.config['SECRET_KEY'] = 'm7u2p$9a1r!b#x@z&k8w'
 CORS(app)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:Bhmk7gh90r@localhost:5432/MTAAskuska'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-swagger = Swagger(app)
+
+swagger_template = {
+    "swagger": "2.0",
+    "info": {
+        "title": "MTAA API",
+        "description": "API pre správu tímov, projektov a úloh",
+        "version": "1.0"
+    },
+    "securityDefinitions": {
+        "Bearer": {
+            "type": "apiKey",
+            "name": "Authorization",
+            "in": "header",
+            "description": "Zadaj token vo formáte **Bearer &lt;token&gt;**"
+        }
+    },
+    "security": [{"Bearer": []}]
+}
+
+swagger = Swagger(app, template=swagger_template)
 
 db = SQLAlchemy(app)
 
 socketio = SocketIO(app, cors_allowed_origins='*')
 
-cred = credentials.Certificate("mtaaprojekt-b3546464b2d5.json")
-firebase_admin.initialize_app(cred)
+# cred = credentials.Certificate("mtaaprojekt-b3546464b2d5.json")
+# firebase_admin.initialize_app(cred)
 
 
 class UserTeam(db.Model):
@@ -122,6 +141,49 @@ def token_required(f):
 
     return decorated
 
+def permission_required(f):
+    @wraps(f)
+    def decorated(current_user, *args, **kwargs):
+        data = request.get_json()
+        task_id = data.get('task_id')
+        team_id = data.get('team_id')
+        project_id = data.get('project_id')
+
+        if task_id:
+            task = Task.query.filter_by(id=task_id).first()
+            if not task:
+                return jsonify({"error": "Task not found"}), 404
+
+            project = Project.query.filter_by(id=task.project_id).first()
+            if not project:
+                return jsonify({"error": "Project not found"}), 404
+
+            current_task = task
+            while current_task:
+                if current_task.assigned_to == current_user.id:
+                    break
+                current_task = Task.query.filter_by(id=current_task.parent_task_id).first()
+            else:
+                user_team = UserTeam.query.filter_by(user_id=current_user.id, team_id=project.team_id).first()
+                if not user_team or user_team.role not in ['admin', 'owner']:
+                    return jsonify({"error": "Permission denied"}), 403
+        if team_id:
+            user_team = UserTeam.query.filter_by(user_id=current_user.id, team_id=team_id).first()
+            if not user_team or user_team.role not in ['admin', 'owner']:
+                return jsonify({"error": "Permission denied"}), 403
+
+        if project_id:
+            project = Project.query.filter_by(id=project_id).first()
+            if not project:
+                return jsonify({"error": "Project not found"}), 404
+
+            user_team = UserTeam.query.filter_by(user_id=current_user.id, team_id=project.team_id).first()
+            if not user_team or user_team.role not in ['admin', 'owner']:
+                return jsonify({"error": "Permission denied"}), 403
+
+        return f(current_user, *args, **kwargs)
+
+    return decorated
 
 
 @app.route('/register', methods=['POST'])
@@ -131,6 +193,8 @@ def register():
     ---
     tags:
       - Auth
+    security:
+      - Bearer: []  
     parameters:
       - in: body
         name: body
@@ -173,6 +237,8 @@ def login():
     ---
     tags:
       - Auth
+    security:
+      - Bearer: [] 
     parameters:
       - in: body
         name: body
@@ -212,12 +278,15 @@ def login():
 
 
 @app.route('/getTeams', methods=['GET'])
-def get_teams():
+@token_required
+def get_teams(current_user):
     """
     Get all teams for a user
     ---
     tags:
       - Teams
+    security:
+      - Bearer: [] 
     parameters:
       - name: userID
         in: query
@@ -247,12 +316,15 @@ def get_teams():
 
 
 @app.route('/createTeam', methods=['POST'])
+@token_required
 def create_team():
     """
     Create a new team and send invitations
     ---
     tags:
       - Teams
+    security:
+      - Bearer: [] 
     parameters:
       - in: body
         name: body
@@ -308,12 +380,15 @@ def create_team():
     return jsonify({"message": "Team created successfully!"}), 201
 
 @app.route('/getInvitations', methods=['GET'])
+@token_required
 def get_invitations():
     """
     Get pending invitations for a user
     ---
     tags:
       - Invitations
+    security:
+      - Bearer: [] 
     parameters:
       - name: userId
         in: query
@@ -350,12 +425,15 @@ def get_invitations():
     return jsonify(invite_list), 200
 
 @app.route('/acceptInvite', methods=['POST'])
+@token_required
 def accept_invite():
     """
     Accept a team invitation
     ---
     tags:
       - Invitations
+    security:
+      - Bearer: [] 
     parameters:
       - in: body
         name: body
@@ -396,12 +474,15 @@ def accept_invite():
     return jsonify({"message": "Invitation accepted and user added to team"}), 200
 
 @app.route('/declineInvite', methods=['POST'])
+@token_required
 def decline_invite():
     """
     Decline a team invitation
     ---
     tags:
       - Invitations
+    security:
+      - Bearer: [] 
     parameters:
       - in: body
         name: body
@@ -440,12 +521,15 @@ def decline_invite():
 
 
 @app.route('/getProjects', methods=['GET'])
-def get_projects():
+@token_required
+def get_projects(current_user):
     """
     Get all projects for a team
     ---
     tags:
       - Projects
+    security:
+      - Bearer: [] 
     parameters:
       - name: teamID
         in: query
@@ -476,12 +560,16 @@ def get_projects():
     return jsonify(project_list), 200
 
 @app.route('/createProject', methods=['POST'])
-def create_project():
+@token_required
+@permission_required
+def create_project(current_user):
     """
     Create a new project
     ---
     tags:
       - Projects
+    security:
+      - Bearer: [] 
     parameters:
       - in: body
         name: body
@@ -525,12 +613,15 @@ def create_project():
     return jsonify({"message": "Project created successfully!"}), 201
 
 @app.route('/getTeamMembers', methods=['GET'])
-def get_team_members():
+@token_required
+def get_team_members(current_user):
     """
     Get all members of a team
     ---
     tags:
       - Teams
+    security:
+      - Bearer: [] 
     parameters:
       - name: teamID
         in: query
@@ -566,12 +657,16 @@ def get_team_members():
 
     return jsonify(member_list), 200
 @app.route('/setInvite', methods=['POST'])
-def set_invite():
+@token_required
+@permission_required
+def set_invite(current_user):
     """
     Send invitation to a user via email
     ---
     tags:
       - Invitations
+    security:
+      - Bearer: [] 
     parameters:
       - in: body
         name: body
@@ -597,7 +692,7 @@ def set_invite():
 
     data = request.get_json()
     email = data.get('email')
-    team_id = data.get('team')
+    team_id = data.get('team_id')
 
     if not email or not team_id:
         return jsonify({"error": "Missing email or team ID"}), 400
@@ -652,12 +747,15 @@ def handle_message(data):
     )
 
 @app.route('/getMessages', methods=['GET'])
+@token_required
 def get_messages():
     """
     Get messages for a team
     ---
     tags:
       - Messages
+    security:
+      - Bearer: [] 
     parameters:
       - name: teamID
         in: query
@@ -706,12 +804,15 @@ def get_messages():
     return jsonify(result), 200
 
 @app.route('/getProjectTasks', methods=['GET'])
-def get_project_tasks():
+@token_required
+def get_project_tasks(current_user):
     """
     Get all tasks for a project
     ---
     tags:
       - Tasks
+    security:
+      - Bearer: [] 
     parameters:
       - name: projectID
         in: query
@@ -746,12 +847,15 @@ def get_project_tasks():
 
 @app.route('/removeTeamMember', methods=['DELETE'])
 @token_required
+@permission_required
 def remove_team_member(current_user):
     """
     Remove a user from a team
     ---
     tags:
       - Teams
+    security:
+      - Bearer: [] 
     parameters:
       - in: body
         name: body
@@ -794,12 +898,15 @@ def remove_team_member(current_user):
 
 @app.route('/createTask', methods=['POST'])
 @token_required
+@permission_required
 def create_task(current_user):
     """
     Create a task in a project
     ---
     tags:
       - Tasks
+    security:
+      - Bearer: [] 
     parameters:
       - in: body
         name: body
@@ -872,6 +979,8 @@ def register_token(current_user):
     ---
     tags:
       - Notifications
+    security:
+      - Bearer: [] 
     parameters:
       - in: body
         name: body
@@ -919,6 +1028,8 @@ def update_device_token(current_user, token):
     ---
     tags:
       - Notifications
+    security:
+      - Bearer: [] 
     parameters:
       - name: token
         in: path
@@ -1005,34 +1116,40 @@ def send_push_notification(fcm_tokens, title, body, data=None):
 
 @app.route('/modifyTaskStatus', methods=['PUT'])
 @token_required
+@permission_required
 def modify_task_status(current_user):
     """
     Modify the status of a task
     ---
     tags:
-        - Tasks
+      - Tasks
+    security:
+      - Bearer: [] 
     parameters:
-        - in: body
-        name: body
+      - name: body
+        in: body
         required: true
         schema:
-            type: object
-            required:
+          type: object
+          required:
             - task_id
             - completed
-            properties:
+          properties:
             task_id:
-                type: integer
+              type: integer
+              example: 1
             completed:
-                type: boolean
+              type: boolean
+              example: true
     responses:
-        200:
+      200:
         description: Task status updated successfully
-        400:
+      400:
         description: Missing task_id or completed status
-        404:
+      404:
         description: Task not found
     """
+
     data = request.get_json()
     task_id = data.get('task_id')
     completed = data.get('completed')
