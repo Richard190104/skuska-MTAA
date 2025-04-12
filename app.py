@@ -133,8 +133,14 @@ def register():
     responses:
       201:
         description: User registered successfully
+      400:
+        description: Email already exists
     """
     data = request.get_json()
+    existing_user = User.query.filter_by(email=data['email']).first()
+    if existing_user:
+        return jsonify({"error": "User with this email already exists"}), 400
+
     new_user = User(username=data['username'], email=data['email'])
     new_user.set_password(data['password'])
     db.session.add(new_user)
@@ -831,6 +837,53 @@ def create_task(current_user):
     db.session.commit()
 
     return jsonify({"message": "Task created successfully!", "task_id": new_task.id}), 201
+
+@app.route('/modifyTaskStatus', methods=['PUT'])
+@token_required
+def modify_task_status(current_user):
+    """
+    Modify the status of a task
+    ---
+    tags:
+        - Tasks
+    parameters:
+        - in: body
+        name: body
+        required: true
+        schema:
+            type: object
+            required:
+            - task_id
+            - completed
+            properties:
+            task_id:
+                type: integer
+            completed:
+                type: boolean
+    responses:
+        200:
+        description: Task status updated successfully
+        400:
+        description: Missing task_id or completed status
+        404:
+        description: Task not found
+    """
+    data = request.get_json()
+    task_id = data.get('task_id')
+    completed = data.get('completed')
+
+    if task_id is None or completed is None:
+        return jsonify({"error": "Missing task_id or completed status"}), 400
+
+    task = Task.query.filter_by(id=task_id).first()
+
+    if not task:
+        return jsonify({"error": "Task not found"}), 404
+
+    task.completed = completed
+    db.session.commit()
+
+    return jsonify({"message": "Task status updated successfully"}), 200
 
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=5000, debug=True)
