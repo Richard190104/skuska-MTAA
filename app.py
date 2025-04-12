@@ -1352,7 +1352,63 @@ def reset_password():
     db.session.commit()
 
     return jsonify({'message': 'Password has been reset successfully'}), 200
+@app.route('/modifyUserRole', methods=['PUT'])
+@token_required
+@permission_required
+def modify_user_role(current_user):
+    """
+    Modify the role of a user in a team
+    ---
+    tags:
+      - Teams
+    security:
+      - Bearer: [] 
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - user_id
+            - team_id
+            - new_role
+          properties:
+            user_id:
+              type: integer
+            team_id:
+              type: integer
+            new_role:
+              type: string
+              enum: [member, admin, owner]
+    responses:
+      200:
+        description: User role updated successfully
+      400:
+        description: Missing user_id, team_id, or new_role
+      404:
+        description: User or team not found
+    """
+    data = request.get_json()
+    user_id = data.get('user_id')
+    team_id = data.get('team_id')
+    new_role = data.get('new_role')
 
+    if not user_id or not team_id or not new_role:
+        return jsonify({"error": "Missing user_id, team_id, or new_role"}), 400
+
+    if new_role not in ['member', 'admin', 'owner']:
+        return jsonify({"error": "Invalid role"}), 400
+
+    user_team = UserTeam.query.filter_by(user_id=user_id, team_id=team_id).first()
+
+    if not user_team:
+        return jsonify({"error": "User is not a member of the team"}), 404
+
+    user_team.role = new_role
+    db.session.commit()
+
+    return jsonify({"message": "User role updated successfully"}), 200
 
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=5000, debug=True)
