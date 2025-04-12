@@ -10,6 +10,8 @@ import jwt
 import requests
 from functools import wraps
 from flasgger import Swagger
+import firebase_admin
+from firebase_admin import credentials, messaging
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'm7u2p$9a1r!b#x@z&k8w'
@@ -22,8 +24,9 @@ db = SQLAlchemy(app)
 
 socketio = SocketIO(app, cors_allowed_origins='*')
 
-FCM_SERVER_KEY = "TU_VLOŽ_SERVER_KĽÚČ_Z_FIREBASE"
-FCM_SEND_ENDPOINT = "https://fcm.googleapis.com/fcm/send"
+cred = credentials.Certificate("mtaaprojekt-b3546464b2d5.json")
+firebase_admin.initialize_app(cred)
+
 
 class UserTeam(db.Model):
     __tablename__ = 'user_teams'
@@ -967,24 +970,33 @@ def get_active_tokens_for_team(team_id, exclude_user_id=None):
 def send_push_notification(fcm_tokens, title, body, data=None):
     if not fcm_tokens:
         return
-    
-    headers = {
-        "Authorization": f"key={FCM_SERVER_KEY}",
-        "Content-Type": "application/json"
-    }
 
-    payload = {
-        "registration_ids": fcm_tokens,
-        "notification": {
-            "title": title,
-            "body": body
-        },
-        "data": data or {}
-    }
+    notification = messaging.Notification(
+        title=title,
+        body=body
+    )
 
-    response = requests.post(FCM_SEND_ENDPOINT, json=payload, headers=headers)
-    if response.status_code != 200:
-        print("FCM Error:", response.status_code, response.text)
+    android_config = messaging.AndroidConfig(
+        priority='high',
+        notification=messaging.AndroidNotification(
+            sound='default'
+        )
+    )
+
+    message = messaging.MulticastMessage(
+        tokens=fcm_tokens,
+        notification=notification,
+        data={k: str(v) for k, v in (data or {}).items()},
+        android=android_config,
+    )
+
+    response = messaging.send_multicast(message)
+
+    print(f"Successfully sent {response.success_count} messages, {response.failure_count} failed.")
+    if response.failure_count > 0:
+        for idx, resp in enumerate(response.responses):
+            if not resp.success:
+                print(f"Failure for token {fcm_tokens[idx]}: {resp.exception}")
 
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=5000, debug=True)
