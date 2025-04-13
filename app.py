@@ -63,6 +63,7 @@ class Team(db.Model):
     id = db.Column(db.Integer, primary_key=True )
     name = db.Column(db.String(100), nullable=False)
     creator_id = db.Column(db.Integer, db.ForeignKey('users.id'))
+    team_description = db.Column(db.String, nullable=False, default="No description")
 
 class User(db.Model):
     __tablename__ = 'users'
@@ -301,7 +302,7 @@ def get_teams(current_user):
     tags:
       - Teams
     security:
-      - Bearer: [] 
+      - Bearer: []
     parameters:
       - name: userID
         in: query
@@ -311,6 +312,25 @@ def get_teams(current_user):
     responses:
       200:
         description: List of teams
+        schema:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+                description: Team ID
+              name:
+                type: string
+                description: Team name
+              creator_id:
+                type: integer
+                description: ID of the team creator
+              description:
+                type: string
+                description: Description of the team
+      400:
+        description: userID is required
     """
     user_id = request.args.get('userID', type=int)
     if user_id is None:
@@ -324,7 +344,8 @@ def get_teams(current_user):
         teams.append({
             "id": team.id,
             "name": team.name,
-            "creator_id": team.creator_id
+            "creator_id": team.creator_id,
+            "description": team.team_descrition
         })
 
     return jsonify(teams), 200
@@ -339,7 +360,7 @@ def create_team(current_user):
     tags:
       - Teams
     security:
-      - Bearer: [] 
+      - Bearer: []
     parameters:
       - in: body
         name: body
@@ -352,19 +373,24 @@ def create_team(current_user):
           properties:
             name:
               type: string
+              description: Name of the team
             description:
               type: string
+              description: Description of the team
             user_id:
               type: integer
+              description: ID of the team creator (owner)
             members:
               type: array
               items:
                 type: string
+              description: List of emails to invite
     responses:
       201:
         description: Team created successfully
       400:
         description: Missing name or user ID
+
     """
 
     data = request.get_json()
@@ -376,7 +402,7 @@ def create_team(current_user):
     if not name or not user_id:
         return jsonify({"message": "Missing name or user ID"}), 400
 
-    new_team = Team(name=name, creator_id=user_id)
+    new_team = Team(name=name, creator_id=user_id, team_description=description or "No description")
     db.session.add(new_team)
     db.session.commit()
 
