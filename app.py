@@ -311,6 +311,10 @@ def get_teams(current_user):
     responses:
       200:
         description: List of teams
+      400:
+        description: Missing userID
+      401:
+        description: User not authorized to view these teams
     """
     user_id = request.args.get('userID', type=int)
     if user_id is None:
@@ -365,6 +369,8 @@ def create_team(current_user):
         description: Team created successfully
       400:
         description: Missing name or user ID
+      401:
+        description: User not authorized
     """
 
     data = request.get_json()
@@ -413,6 +419,10 @@ def get_invitations(current_user):
     responses:
       200:
         description: List of pending invitations
+      400:
+        description: Missing userID
+      401:
+        description: User not authorized to view these invitations
     """
 
     user_id = request.args.get('userId', type=int)
@@ -467,6 +477,8 @@ def accept_invite(current_user):
         description: Invitation not found
       400:
         description: Invitation already handled
+      401:
+        description: User not authorized to accept this invitation
     """
 
     data = request.get_json()
@@ -516,6 +528,8 @@ def decline_invite(current_user):
         description: Invitation not found
       400:
         description: Invitation already handled
+      401:
+        description: User not authorized to decline this invitation
     """
 
     data = request.get_json()
@@ -554,6 +568,10 @@ def get_projects(current_user):
     responses:
       200:
         description: List of projects
+      400:
+        description: Missing teamID
+      401:
+        description: User not authorized to view these projects
     """
 
     team_id = request.args.get('teamID', type=int)
@@ -607,6 +625,11 @@ def create_project(current_user):
         description: Project created successfully
       400:
         description: Missing project name or team ID
+      401:
+        description: User not authorized
+      403:
+        description: User does not have permission to create projects in this team
+       
     """
 
     data = request.get_json()
@@ -646,6 +669,10 @@ def get_team_members(current_user):
     responses:
       200:
         description: List of team members
+      400:
+        description: Missing teamID
+      401:
+        description: User not authorized
     """
 
     team_id = request.args.get('teamID', type=int)
@@ -705,6 +732,10 @@ def set_invite(current_user):
         description: Missing email or team ID
       404:
         description: User with provided email not found
+      401:
+        description: User not authorized to send invitations
+      403:
+        description: User does not have permission to send invitations
     """
 
     data = request.get_json()
@@ -792,6 +823,10 @@ def get_messages(current_user):
     responses:
       200:
         description: List of messages
+      400:
+        description: Missing teamID
+      401:
+        description: User not authorized
     """
 
     team_id = request.args.get('teamID', type=int)
@@ -839,6 +874,10 @@ def get_project_tasks(current_user):
     responses:
       200:
         description: List of tasks
+      400: 
+        description: Missing projectID
+      401:
+        description: User not authorized
     """
 
     project_id = request.args.get('projectID', type=int)
@@ -894,6 +933,10 @@ def remove_team_member(current_user):
         description: Missing user_id or team_id
       404:
         description: User is not a member
+      401:
+        description: User not authorized
+      403:
+        description: User does not have permission to remove members from this team
     """
 
     data = request.get_json()
@@ -952,6 +995,10 @@ def create_task(current_user):
         description: Task created successfully
       400:
         description: Missing task name or project ID
+      401:
+        description: User not authorized
+      403: 
+        description: User does not have permission to create tasks in this project
     """
 
     data = request.get_json()
@@ -1015,6 +1062,8 @@ def register_token(current_user):
         description: FCM token registered or reactivated
       400:
         description: Token is required
+      401:
+        description: User not authorized
     """
 
     data = request.get_json()
@@ -1071,6 +1120,8 @@ def update_device_token(current_user, token):
         description: Missing is_active value
       404:
         description: Token not found
+      401:
+        description: User not authorized
     """
     data = request.get_json()
     is_active = data.get('is_active')
@@ -1165,6 +1216,10 @@ def modify_task_status(current_user):
         description: Missing task_id or completed status
       404:
         description: Task not found
+      401:
+        description: User not authorized
+      403:
+        description: User does not have permission to modify this task
     """
 
     data = request.get_json()
@@ -1393,6 +1448,10 @@ def modify_user_role(current_user):
         description: Missing user_id, team_id, or new_role
       404:
         description: User or team not found
+      401:
+        description: User not authorized
+      403:
+        description: User does not have permission to modify this role
     """
     data = request.get_json()
     user_id = data.get('user_id')
@@ -1422,31 +1481,33 @@ def update_profile_picture(current_user):
     Update the profile picture of a user
     ---
     tags:
-        - Users
+      - Users
     security:
-        - Bearer: [] 
+      - Bearer: [] 
     parameters:
-        - in: body
+      - in: body
         name: body
         required: true
         schema:
-            type: object
-            required:
+          type: object
+          required:
             - userId
             - profilePicture
-            properties:
+          properties:
             userId:
-                type: integer
+              type: integer
             profilePicture:
-                type: string
-                description: Base64 encoded image
+              type: string
+              description: Base64 encoded image
     responses:
-        200:
+      200:
         description: Profile picture updated successfully
-        400:
+      400:
         description: Missing userId or profilePicture
-        404:
+      404:
         description: User not found
+      401:
+        description: User not authorized
     """
     data = request.get_json()
     user_id = data.get('userId')
