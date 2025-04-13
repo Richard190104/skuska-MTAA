@@ -1,0 +1,1096 @@
+{
+  "definitions": {},
+  "info": {
+    "description": "API pre spr\u00e1vu t\u00edmov, projektov a \u00faloh",
+    "title": "MTAA API",
+    "version": "1.0"
+  },
+  "paths": {
+    "/acceptInvite": {
+      "post": {
+        "parameters": [
+          {
+            "in": "body",
+            "name": "body",
+            "required": true,
+            "schema": {
+              "properties": {
+                "invite_id": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "invite_id"
+              ],
+              "type": "object"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Invitation accepted and user added to team"
+          },
+          "400": {
+            "description": "Invitation already handled"
+          },
+          "401": {
+            "description": "User not authorized to accept this invitation"
+          },
+          "404": {
+            "description": "Invitation not found"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "summary": "Accept a team invitation",
+        "tags": [
+          "Invitations"
+        ]
+      }
+    },
+    "/createProject": {
+      "post": {
+        "parameters": [
+          {
+            "in": "body",
+            "name": "body",
+            "required": true,
+            "schema": {
+              "properties": {
+                "deadline": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "team_id": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "name",
+                "team_id"
+              ],
+              "type": "object"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Project created successfully"
+          },
+          "400": {
+            "description": "Missing project name or team ID"
+          },
+          "401": {
+            "description": "User not authorized"
+          },
+          "403": {
+            "description": "User does not have permission to create projects in this team"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "summary": "Create a new project",
+        "tags": [
+          "Projects"
+        ]
+      }
+    },
+    "/createTask": {
+      "post": {
+        "parameters": [
+          {
+            "in": "body",
+            "name": "body",
+            "required": true,
+            "schema": {
+              "properties": {
+                "assign": {
+                  "type": "integer"
+                },
+                "deadline": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "parent_task_id": {
+                  "type": "integer"
+                },
+                "project_id": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "name",
+                "project_id"
+              ],
+              "type": "object"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Task created successfully"
+          },
+          "400": {
+            "description": "Missing task name or project ID"
+          },
+          "401": {
+            "description": "User not authorized"
+          },
+          "403": {
+            "description": "User does not have permission to create tasks in this project"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "summary": "Create a task in a project",
+        "tags": [
+          "Tasks"
+        ]
+      }
+    },
+    "/createTeam": {
+      "post": {
+        "parameters": [
+          {
+            "in": "body",
+            "name": "body",
+            "required": true,
+            "schema": {
+              "properties": {
+                "description": {
+                  "description": "Description of the team",
+                  "type": "string"
+                },
+                "members": {
+                  "description": "List of emails to invite",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "name": {
+                  "description": "Name of the team",
+                  "type": "string"
+                },
+                "user_id": {
+                  "description": "ID of the team creator (owner)",
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "name",
+                "user_id"
+              ],
+              "type": "object"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Team created successfully"
+          },
+          "400": {
+            "description": "Missing name or user ID"
+          },
+          "401": {
+            "description": "User not authorized"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "summary": "Create a new team and send invitations",
+        "tags": [
+          "Teams"
+        ]
+      }
+    },
+    "/declineInvite": {
+      "post": {
+        "parameters": [
+          {
+            "in": "body",
+            "name": "body",
+            "required": true,
+            "schema": {
+              "properties": {
+                "invite_id": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "invite_id"
+              ],
+              "type": "object"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Invitation declined"
+          },
+          "400": {
+            "description": "Invitation already handled"
+          },
+          "401": {
+            "description": "User not authorized to decline this invitation"
+          },
+          "404": {
+            "description": "Invitation not found"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "summary": "Decline a team invitation",
+        "tags": [
+          "Invitations"
+        ]
+      }
+    },
+    "/device_token/{token}": {
+      "put": {
+        "parameters": [
+          {
+            "description": "The FCM token to update",
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "in": "body",
+            "name": "body",
+            "required": true,
+            "schema": {
+              "properties": {
+                "is_active": {
+                  "description": "Whether the token is active (True) or deactivated (False)",
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "is_active"
+              ],
+              "type": "object"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Token updated successfully"
+          },
+          "400": {
+            "description": "Missing is_active value"
+          },
+          "401": {
+            "description": "User not authorized"
+          },
+          "404": {
+            "description": "Token not found"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "summary": "Update FCM device token status (activate/deactivate)",
+        "tags": [
+          "Notifications"
+        ]
+      }
+    },
+    "/getInvitations": {
+      "get": {
+        "parameters": [
+          {
+            "description": "User ID to fetch invitations",
+            "in": "query",
+            "name": "userId",
+            "required": true,
+            "type": "integer"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of pending invitations"
+          },
+          "400": {
+            "description": "Missing userID"
+          },
+          "401": {
+            "description": "User not authorized to view these invitations"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "summary": "Get pending invitations for a user",
+        "tags": [
+          "Invitations"
+        ]
+      }
+    },
+    "/getMessages": {
+      "get": {
+        "parameters": [
+          {
+            "description": "Team ID",
+            "in": "query",
+            "name": "teamID",
+            "required": true,
+            "type": "integer"
+          },
+          {
+            "description": "Pagination offset",
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "type": "integer"
+          },
+          {
+            "description": "Max messages to return",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "type": "integer"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of messages"
+          },
+          "400": {
+            "description": "Missing teamID"
+          },
+          "401": {
+            "description": "User not authorized"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "summary": "Get messages for a team",
+        "tags": [
+          "Messages"
+        ]
+      }
+    },
+    "/getProjectTasks": {
+      "get": {
+        "parameters": [
+          {
+            "description": "ID of the project",
+            "in": "query",
+            "name": "projectID",
+            "required": true,
+            "type": "integer"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of tasks"
+          },
+          "400": {
+            "description": "Missing projectID"
+          },
+          "401": {
+            "description": "User not authorized"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "summary": "Get all tasks for a project",
+        "tags": [
+          "Tasks"
+        ]
+      }
+    },
+    "/getProjects": {
+      "get": {
+        "parameters": [
+          {
+            "description": "ID of the team",
+            "in": "query",
+            "name": "teamID",
+            "required": true,
+            "type": "integer"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of projects"
+          },
+          "400": {
+            "description": "Missing teamID"
+          },
+          "401": {
+            "description": "User not authorized to view these projects"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "summary": "Get all projects for a team",
+        "tags": [
+          "Projects"
+        ]
+      }
+    },
+    "/getTeamMembers": {
+      "get": {
+        "parameters": [
+          {
+            "description": "Team ID",
+            "in": "query",
+            "name": "teamID",
+            "required": true,
+            "type": "integer"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of team members"
+          },
+          "400": {
+            "description": "Missing teamID"
+          },
+          "401": {
+            "description": "User not authorized"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "summary": "Get all members of a team",
+        "tags": [
+          "Teams"
+        ]
+      }
+    },
+    "/getTeams": {
+      "get": {
+        "parameters": [
+          {
+            "description": "ID of the user",
+            "in": "query",
+            "name": "userID",
+            "required": true,
+            "type": "integer"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of teams",
+            "schema": {
+              "items": {
+                "properties": {
+                  "creator_id": {
+                    "description": "ID of the team creator",
+                    "type": "integer"
+                  },
+                  "description": {
+                    "description": "Description of the team",
+                    "type": "string"
+                  },
+                  "id": {
+                    "description": "Team ID",
+                    "type": "integer"
+                  },
+                  "name": {
+                    "description": "Team name",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              },
+              "type": "array"
+            }
+          },
+          "400": {
+            "description": "userID is required"
+          },
+          "401": {
+            "description": "User not authorized to view these teams"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "summary": "Get all teams for a user",
+        "tags": [
+          "Teams"
+        ]
+      }
+    },
+    "/login": {
+      "post": {
+        "parameters": [
+          {
+            "in": "body",
+            "name": "body",
+            "required": true,
+            "schema": {
+              "properties": {
+                "email": {
+                  "type": "string"
+                },
+                "password": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "email",
+                "password"
+              ],
+              "type": "object"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Login successful"
+          },
+          "401": {
+            "description": "Invalid credentials"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "summary": "Authenticate user and return a JWT token",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/modifyTaskStatus": {
+      "put": {
+        "parameters": [
+          {
+            "in": "body",
+            "name": "body",
+            "required": true,
+            "schema": {
+              "properties": {
+                "completed": {
+                  "example": true,
+                  "type": "boolean"
+                },
+                "task_id": {
+                  "example": 1,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "task_id",
+                "completed"
+              ],
+              "type": "object"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Task status updated successfully"
+          },
+          "400": {
+            "description": "Missing task_id or completed status"
+          },
+          "401": {
+            "description": "User not authorized"
+          },
+          "403": {
+            "description": "User does not have permission to modify this task"
+          },
+          "404": {
+            "description": "Task not found"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "summary": "Modify the status of a task",
+        "tags": [
+          "Tasks"
+        ]
+      }
+    },
+    "/modifyUserRole": {
+      "put": {
+        "parameters": [
+          {
+            "in": "body",
+            "name": "body",
+            "required": true,
+            "schema": {
+              "properties": {
+                "new_role": {
+                  "enum": [
+                    "member",
+                    "admin",
+                    "owner"
+                  ],
+                  "type": "string"
+                },
+                "team_id": {
+                  "type": "integer"
+                },
+                "user_id": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "user_id",
+                "team_id",
+                "new_role"
+              ],
+              "type": "object"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User role updated successfully"
+          },
+          "400": {
+            "description": "Missing user_id, team_id, or new_role"
+          },
+          "401": {
+            "description": "User not authorized"
+          },
+          "403": {
+            "description": "User does not have permission to modify this role"
+          },
+          "404": {
+            "description": "User or team not found"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "summary": "Modify the role of a user in a team",
+        "tags": [
+          "Teams"
+        ]
+      }
+    },
+    "/register": {
+      "post": {
+        "parameters": [
+          {
+            "in": "body",
+            "name": "body",
+            "required": true,
+            "schema": {
+              "properties": {
+                "email": {
+                  "type": "string"
+                },
+                "password": {
+                  "type": "string"
+                },
+                "username": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "username",
+                "email",
+                "password"
+              ],
+              "type": "object"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "User registered successfully"
+          },
+          "400": {
+            "description": "Email already exists"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "summary": "Register a new user",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/register_token": {
+      "post": {
+        "parameters": [
+          {
+            "in": "body",
+            "name": "body",
+            "required": true,
+            "schema": {
+              "properties": {
+                "token": {
+                  "description": "The FCM device token to register or reactivate",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "token"
+              ],
+              "type": "object"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "FCM token registered or reactivated"
+          },
+          "400": {
+            "description": "Token is required"
+          },
+          "401": {
+            "description": "User not authorized"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "summary": "Register or reactivate an FCM token for the current user",
+        "tags": [
+          "Notifications"
+        ]
+      }
+    },
+    "/removeTeamMember": {
+      "delete": {
+        "parameters": [
+          {
+            "in": "body",
+            "name": "body",
+            "required": true,
+            "schema": {
+              "properties": {
+                "team_id": {
+                  "type": "integer"
+                },
+                "user_id": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "user_id",
+                "team_id"
+              ],
+              "type": "object"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User removed successfully"
+          },
+          "400": {
+            "description": "Missing user_id or team_id"
+          },
+          "401": {
+            "description": "User not authorized"
+          },
+          "403": {
+            "description": "User does not have permission to remove members from this team"
+          },
+          "404": {
+            "description": "User is not a member"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "summary": "Remove a user from a team",
+        "tags": [
+          "Teams"
+        ]
+      }
+    },
+    "/requestPasswordReset": {
+      "post": {
+        "parameters": [
+          {
+            "in": "body",
+            "name": "body",
+            "required": true,
+            "schema": {
+              "properties": {
+                "email": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "email"
+              ],
+              "type": "object"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Code sent if user exists"
+          },
+          "400": {
+            "description": "Email is required"
+          }
+        },
+        "summary": "Request a password reset code via email",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/resetPassword": {
+      "put": {
+        "parameters": [
+          {
+            "in": "body",
+            "name": "body",
+            "required": true,
+            "schema": {
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "email": {
+                  "type": "string"
+                },
+                "new_password": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "email",
+                "code",
+                "new_password"
+              ],
+              "type": "object"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Password reset successful"
+          },
+          "400": {
+            "description": "Invalid or expired code"
+          },
+          "404": {
+            "description": "User not found"
+          }
+        },
+        "summary": "Reset password with a verified reset code",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/setInvite": {
+      "post": {
+        "parameters": [
+          {
+            "in": "body",
+            "name": "body",
+            "required": true,
+            "schema": {
+              "properties": {
+                "email": {
+                  "type": "string"
+                },
+                "team": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "email",
+                "team"
+              ],
+              "type": "object"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Invitation created successfully"
+          },
+          "400": {
+            "description": "Missing email or team ID"
+          },
+          "401": {
+            "description": "User not authorized to send invitations"
+          },
+          "403": {
+            "description": "User does not have permission to send invitations"
+          },
+          "404": {
+            "description": "User with provided email not found"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "summary": "Send invitation to a user via email",
+        "tags": [
+          "Invitations"
+        ]
+      }
+    },
+    "/updateProfilePicture": {
+      "put": {
+        "parameters": [
+          {
+            "in": "body",
+            "name": "body",
+            "required": true,
+            "schema": {
+              "properties": {
+                "profilePicture": {
+                  "description": "Base64 encoded image",
+                  "type": "string"
+                },
+                "userId": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "userId",
+                "profilePicture"
+              ],
+              "type": "object"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Profile picture updated successfully"
+          },
+          "400": {
+            "description": "Missing userId or profilePicture"
+          },
+          "401": {
+            "description": "User not authorized"
+          },
+          "404": {
+            "description": "User not found"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "summary": "Update the profile picture of a user",
+        "tags": [
+          "Users"
+        ]
+      }
+    },
+    "/verifyResetCode": {
+      "post": {
+        "parameters": [
+          {
+            "in": "body",
+            "name": "body",
+            "required": true,
+            "schema": {
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "email": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "email",
+                "code"
+              ],
+              "type": "object"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Code verified successfully"
+          },
+          "400": {
+            "description": "Invalid or expired code"
+          }
+        },
+        "summary": "Verify password reset code",
+        "tags": [
+          "Auth"
+        ]
+      }
+    }
+  },
+  "security": [
+    {
+      "Bearer": []
+    }
+  ],
+  "securityDefinitions": {
+    "Bearer": {
+      "description": "Zadaj token vo form\u00e1te **Bearer &lt;token&gt;**",
+      "in": "header",
+      "name": "Authorization",
+      "type": "apiKey"
+    }
+  },
+  "swagger": "2.0"
+}
