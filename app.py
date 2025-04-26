@@ -48,8 +48,9 @@ socketio = SocketIO(app, cors_allowed_origins='*')
 
 # cred = credentials.Certificate("mtaaprojekt-b3546464b2d5.json")
 # firebase_admin.initialize_app(cred)
-SMTP_EMAIL="mtaaprojekt@gmail.com"
-SMTP_PASSWORD="vjos ulgj qkyw kzf"
+
+SMTP_EMAIL="jan2003porubsky@gmail.com"
+SMTP_PASSWORD="nszu ohwv wnks fpvr"
 
 
 class UserTeam(db.Model):
@@ -347,7 +348,7 @@ def get_teams(current_user):
             "id": team.id,
             "name": team.name,
             "creator_id": team.creator_id,
-            "description": team.team_descrition
+            "description": team.team_description
         })
 
     return jsonify(teams), 200
@@ -1279,7 +1280,7 @@ def send_reset_email(email, code):
     with smtplib.SMTP(smtp_server, smtp_port) as server:
         server.starttls()
         server.login(sender_email, sender_password)
-        server.sendd_message(msg)
+        server.send_message(msg)
 
     print(f"Reset code sent to {email}")
 
@@ -1554,6 +1555,67 @@ def update_profile_picture(current_user):
         "message": "Profile picture updated successfully",
         "profile_picture": user.profile_picture.decode('utf-8') if user.profile_picture else None
     }), 200
+
+
+@app.route('/modifyTaskAssignedTo', methods=['PUT'])
+@token_required
+@permission_required
+def modify_task_assigned_to(current_user):
+  """
+  Modify the assigned user of a task
+  ---
+  tags:
+    - Tasks
+  security:
+    - Bearer: [] 
+  parameters:
+    - in: body
+    name: body
+    required: true
+    schema:
+      type: object
+      required:
+      - task_id
+      - assigned_to
+      properties:
+      task_id:
+        type: integer
+        description: ID of the task
+      assigned_to:
+        type: integer
+        description: ID of the user to assign the task to
+  responses:
+    200:
+    description: Task assignment updated successfully
+    400:
+    description: Missing task_id or assigned_to
+    404:
+    description: Task or user not found
+    401:
+    description: User not authorized
+    403:
+    description: User does not have permission to modify this task
+  """
+  data = request.get_json()
+  task_id = data.get('task_id')
+  assigned_to = data.get('assigned_to')
+
+  if not task_id or not assigned_to:
+    return jsonify({"error": "Missing task_id or assigned_to"}), 400
+
+  task = Task.query.filter_by(id=task_id).first()
+  if not task:
+    return jsonify({"error": "Task not found"}), 404
+
+  user = User.query.filter_by(id=assigned_to).first()
+  if not user:
+    return jsonify({"error": "User not found"}), 404
+
+  task.assigned_to = assigned_to
+  db.session.commit()
+
+  return jsonify({"message": "Task assignment updated successfully"}), 200
+
 
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=5000, debug=True)
