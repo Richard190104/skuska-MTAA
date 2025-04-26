@@ -276,21 +276,21 @@ def login():
     data = request.get_json()
     user = User.query.filter_by(email=data['email']).first()
     if user and user.check_password(data['password']):
-        token = jwt.encode({
-            'user_id': user.id,
-            'exp': datetime.utcnow() + timedelta(hours=6)
-        }, app.config['SECRET_KEY'], algorithm='HS256')
+      token = jwt.encode({
+          'user_id': user.id,
+          'exp': datetime.utcnow() + timedelta(hours=6)
+      }, app.config['SECRET_KEY'], algorithm='HS256')
 
-        return jsonify({
-            "message": "Login successful!",
-            "token": token,
-            "userID": user.id,
-            "username": user.username,
-            "email": user.email,
-            "profile_picture": user.profile_picture.decode() if user.profile_picture else None
-        }), 200
+      return jsonify({
+          "message": "Login successful!",
+          "token": token,
+          "userID": user.id,
+          "username": user.username,
+          "email": user.email,
+          "profile_picture": user.profile_picture.decode() if user.profile_picture else None
+      }), 200
     else:
-        return jsonify({"error": "Invalid email or password"}), 401
+      return jsonify({"error": "Invalid email or password"}), 401
 
 
 
@@ -1412,7 +1412,7 @@ def reset_password():
     email = data.get('email')
     code = data.get('code')
     new_password = data.get('new_password')
-
+    print(new_password, email, code)
     if not email or not code or not new_password:
         return jsonify({'error': 'Missing email, code or new password'}), 400
 
@@ -1616,6 +1616,56 @@ def modify_task_assigned_to(current_user):
 
   return jsonify({"message": "Task assignment updated successfully"}), 200
 
+
+@app.route('/getUserTasks', methods=['GET'])
+@token_required
+def get_user_tasks(current_user):
+  """
+  Get all tasks of teams that the user is a member of
+  ---
+  tags:
+    - Tasks
+  security:
+    - Bearer: [] 
+  parameters:
+    - name: user_id
+    in: query
+    type: integer
+    required: true
+    description: ID of the user
+  responses:
+    200:
+    description: List of tasks
+    400:
+    description: Missing user_id
+    401:
+    description: User not authorized
+  """
+  user_id = request.args.get('user_id', type=int)
+
+  if user_id is None:
+    return jsonify({"error": "user_id is required"}), 400
+
+  user_teams = UserTeam.query.filter_by(user_id=user_id).all()
+  team_ids = [user_team.team_id for user_team in user_teams]
+
+  tasks = db.session.query(Task, Project, Team, User.username)\
+    .join(Project, Task.project_id == Project.id)\
+    .join(Team, Project.team_id == Team.id)\
+    .outerjoin(User, Task.assigned_to == User.id)\
+    .filter(Project.team_id.in_(team_ids)).all()
+  task_list = []
+  for task, project, team, assigned_to_name in tasks:
+    task_list.append({
+      "team_name": team.name,
+      "task_name": task.name,
+      "task_description": task.description,
+      "task_completed": task.completed,
+      "task_assigned_to": assigned_to_name,
+      "deadline": task.deadline.isoformat() if task.deadline else None
+    })
+
+  return jsonify(task_list), 200
 
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=5000, debug=True)
