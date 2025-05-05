@@ -45,7 +45,7 @@ swagger = Swagger(app, template=swagger_template)
 db = SQLAlchemy(app)
 
 socketio = SocketIO(app, cors_allowed_origins='*')
-
+# ahoj
 # cred = credentials.Certificate("mtaaprojekt-b3546464b2d5.json")
 # firebase_admin.initialize_app(cred)
 
