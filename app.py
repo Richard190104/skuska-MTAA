@@ -1635,7 +1635,7 @@ def modify_task_assigned_to(current_user):
 @token_required
 def get_user_tasks(current_user):
   """
-  Get all tasks of teams that the user is a member of
+  Get all tasks assigned to the user
   ---
   tags:
     - Tasks
@@ -1660,22 +1660,18 @@ def get_user_tasks(current_user):
   if user_id is None:
     return jsonify({"error": "user_id is required"}), 400
 
-  user_teams = UserTeam.query.filter_by(user_id=user_id).all()
-  team_ids = [user_team.team_id for user_team in user_teams]
-
-  tasks = db.session.query(Task, Project, Team, User.username)\
+  tasks = db.session.query(Task, Project, Team)\
     .join(Project, Task.project_id == Project.id)\
     .join(Team, Project.team_id == Team.id)\
-    .outerjoin(User, Task.assigned_to == User.id)\
-    .filter(Project.team_id.in_(team_ids)).all()
+    .filter(Task.assigned_to == user_id).all()
+  print(tasks)
   task_list = []
-  for task, project, team, assigned_to_name in tasks:
+  for task, project, team in tasks:
     task_list.append({
       "team_name": team.name,
       "task_name": task.name,
       "task_description": task.description,
       "task_completed": task.completed,
-      "task_assigned_to": assigned_to_name,
       "deadline": task.deadline.isoformat() if task.deadline else None
     })
 
