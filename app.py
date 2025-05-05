@@ -10,12 +10,16 @@ import jwt
 import requests
 from functools import wraps
 from flasgger import Swagger
-import firebase_admin
-from firebase_admin import credentials, messaging
+import json
+import requests
+from google.oauth2 import service_account
+import google.auth.transport.requests
+
 import random
 import smtplib
 from email.mime.text import MIMEText
-
+SERVICE_ACCOUNT_FILE = 'mtaa-fe23c-firebase-adminsdk-fbsvc-375beb7dac.json'
+FCM_ENDPOINT = 'https://fcm.googleapis.com/v1/projects/mtaa-fe23c/messages:send'
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'm7u2p$9a1r!b#x@z&k8w'
 CORS(app)
@@ -45,9 +49,6 @@ swagger = Swagger(app, template=swagger_template)
 db = SQLAlchemy(app)
 
 socketio = SocketIO(app, cors_allowed_origins='*')
-# ahoj
-# cred = credentials.Certificate("mtaaprojekt-b3546464b2d5.json")
-# firebase_admin.initialize_app(cred)
 
 SMTP_EMAIL="jan2003porubsky@gmail.com"
 SMTP_PASSWORD="nszu ohwv wnks fpvr"
@@ -791,32 +792,36 @@ def on_join(data):
 
 @socketio.on('send_message')
 def handle_message(data):
-    sender_id = data['sender_id']
-    team_id = data['team_id']
-    content = data['content']
+  sender_id = data['sender_id']
+  team_id = data['team_id']
+  content = data['content']
 
-    user = User.query.get(sender_id)
-    sender_name = user.username if user else "Unknwon"
+  user = User.query.get(sender_id)
+  sender_name = user.username if user else "Unknown"
 
-    msg = Message(user_id=sender_id, team_id=team_id, message=content)
-    db.session.add(msg)
-    db.session.commit()
+  team = Team.query.get(team_id)
+  team_name = team.name if team else "Unknown Team"
 
-    room = f"team_{team_id}"
-    emit('receive_message', {
-        'sender_id': sender_id,
-        'team_id': team_id,
-        'content': content,
-        'date': msg.date.isoformat(),
-    }, room=room)
+  msg = Message(user_id=sender_id, team_id=team_id, message=content)
+  db.session.add(msg)
+  db.session.commit()
 
-    fcm_tokens = get_active_tokens_for_team(team_id, exclude_user_id=sender_id)
-    send_push_notification(
-        fcm_tokens,
-        title=f"Message from {sender_name}",
-        body=content[:100] + ("..." if len(content) > 100 else ""),
-        data={"team_id": str(team_id), "type": "chat_message"}
-    )
+  room = f"team_{team_id}"
+  emit('receive_message', {
+    'sender_id': sender_id,
+    'team_id': team_id,
+    'team_name': team_name,
+    'content': content,
+    'date': msg.date.isoformat(),
+  }, room=room)
+
+  fcm_tokens = get_active_tokens_for_team(team_id, exclude_user_id=sender_id)
+  send_push_notifications(
+    fcm_tokens,
+    title=f"Message from {sender_name}",
+    body=content[:100] + ("..." if len(content) > 100 else ""),
+    data={"team_id": str(team_id), "team_name": team_name, "type": "chat_message"}
+  )
 
 @app.route('/getMessages', methods=['GET'])
 @token_required
@@ -1089,10 +1094,8 @@ def register_token(current_user):
       401:
         description: User not authorized
     """
-
     data = request.get_json()
     token = data.get('token')
-
     if not token:
         return jsonify({'error': 'Token is required'}), 400
     
@@ -1110,9 +1113,9 @@ def register_token(current_user):
     return jsonify({'message': 'FCM token registered or reactivated'}), 200
 
 
-@app.route('/device_token/<string:token>', methods=['PUT'])
+@app.route('/device_token', methods=['PUT'])
 @token_required
-def update_device_token(current_user, token):
+def update_device_token(current_user):
     """
     Update FCM device token status (activate/deactivate)
     ---
@@ -1149,12 +1152,12 @@ def update_device_token(current_user, token):
     """
     data = request.get_json()
     is_active = data.get('is_active')
-
+    token = data.get('token')
     if is_active is None:
         return jsonify({'error': 'Missing is-active value'}), 400
     
     token_record = DeviceToken.query.filter_by(token=token, user_id=current_user.id).first()
-
+   
     if not token_record:
         return jsonify({'error': 'Token not found'}), 404
     
@@ -1175,36 +1178,47 @@ def get_active_tokens_for_team(team_id, exclude_user_id=None):
 
     return [row.token for row in query.all()]
 
-def send_push_notification(fcm_tokens, title, body, data=None):
-    if not fcm_tokens:
-        return
+def get_access_token():
+    credentials = service_account.Credentials.from_service_account_file(
+        SERVICE_ACCOUNT_FILE,
+        scopes=["https://www.googleapis.com/auth/firebase.messaging"]
+    )
+    auth_req = google.auth.transport.requests.Request()
+    credentials.refresh(auth_req)
+    return credentials.token
 
-    notification = messaging.Notification(
-        title=title,
-        body=body
+def send_push_notifications(fcm_tokens, title, body, data=None,image_url=None):
+  access_token = get_access_token()
+  headers = {
+    'Authorization': f'Bearer {access_token}',
+    'Content-Type': 'application/json; UTF-8',
+  }
+
+  for token in fcm_tokens:
+    team_name = data.get("team_name", "Unknown Team") if data else "Unknown Team"
+   
+    payload = {
+      "message": {
+        "token": token,
+        "notification": {
+          "title": title,
+          "body": f"Team Name: {team_name}\n{body}",
+          "image": image_url if image_url else None
+        },
+        "data": {k: str(v) for k, v in (data or {}).items()}
+      }
+    }
+
+    response = requests.post(
+      FCM_ENDPOINT,
+      headers=headers,
+      data=json.dumps(payload)
     )
 
-    android_config = messaging.AndroidConfig(
-        priority='high',
-        notification=messaging.AndroidNotification(
-            sound='default'
-        )
-    )
-
-    message = messaging.MulticastMessage(
-        tokens=fcm_tokens,
-        notification=notification,
-        data={k: str(v) for k, v in (data or {}).items()},
-        android=android_config,
-    )
-
-    response = messaging.send_multicast(message)
-
-    print(f"Successfully sent {response.success_count} messages, {response.failure_count} failed.")
-    if response.failure_count > 0:
-        for idx, resp in enumerate(response.responses):
-            if not resp.success:
-                print(f"Failure for token {fcm_tokens[idx]}: {resp.exception}")
+    if response.status_code != 200:
+      print(f"Failed to send message to {token}: {response.text}")
+    else:
+      print(f"Notification sent to {token}")
 
 @app.route('/modifyTaskStatus', methods=['PUT'])
 @token_required
@@ -1621,7 +1635,7 @@ def modify_task_assigned_to(current_user):
 @token_required
 def get_user_tasks(current_user):
   """
-  Get all tasks of teams that the user is a member of
+  Get all tasks assigned to the user
   ---
   tags:
     - Tasks
@@ -1646,22 +1660,18 @@ def get_user_tasks(current_user):
   if user_id is None:
     return jsonify({"error": "user_id is required"}), 400
 
-  user_teams = UserTeam.query.filter_by(user_id=user_id).all()
-  team_ids = [user_team.team_id for user_team in user_teams]
-
-  tasks = db.session.query(Task, Project, Team, User.username)\
+  tasks = db.session.query(Task, Project, Team)\
     .join(Project, Task.project_id == Project.id)\
     .join(Team, Project.team_id == Team.id)\
-    .outerjoin(User, Task.assigned_to == User.id)\
-    .filter(Project.team_id.in_(team_ids)).all()
+    .filter(Task.assigned_to == user_id).all()
+  print(tasks)
   task_list = []
-  for task, project, team, assigned_to_name in tasks:
+  for task, project, team in tasks:
     task_list.append({
       "team_name": team.name,
       "task_name": task.name,
       "task_description": task.description,
       "task_completed": task.completed,
-      "task_assigned_to": assigned_to_name,
       "deadline": task.deadline.isoformat() if task.deadline else None
     })
 
