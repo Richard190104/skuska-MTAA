@@ -792,32 +792,36 @@ def on_join(data):
 
 @socketio.on('send_message')
 def handle_message(data):
-    sender_id = data['sender_id']
-    team_id = data['team_id']
-    content = data['content']
+  sender_id = data['sender_id']
+  team_id = data['team_id']
+  content = data['content']
 
-    user = User.query.get(sender_id)
-    sender_name = user.username if user else "Unknwon"
+  user = User.query.get(sender_id)
+  sender_name = user.username if user else "Unknown"
 
-    msg = Message(user_id=sender_id, team_id=team_id, message=content)
-    db.session.add(msg)
-    db.session.commit()
+  team = Team.query.get(team_id)
+  team_name = team.name if team else "Unknown Team"
 
-    room = f"team_{team_id}"
-    emit('receive_message', {
-        'sender_id': sender_id,
-        'team_id': team_id,
-        'content': content,
-        'date': msg.date.isoformat(),
-    }, room=room)
+  msg = Message(user_id=sender_id, team_id=team_id, message=content)
+  db.session.add(msg)
+  db.session.commit()
 
-    fcm_tokens = get_active_tokens_for_team(team_id, exclude_user_id=sender_id)
-    send_push_notifications(
-        fcm_tokens,
-        title=f"Message from {sender_name}",
-        body=content[:100] + ("..." if len(content) > 100 else ""),
-        data={"team_id": str(team_id), "type": "chat_message"}
-    )
+  room = f"team_{team_id}"
+  emit('receive_message', {
+    'sender_id': sender_id,
+    'team_id': team_id,
+    'team_name': team_name,
+    'content': content,
+    'date': msg.date.isoformat(),
+  }, room=room)
+
+  fcm_tokens = get_active_tokens_for_team(team_id, exclude_user_id=sender_id)
+  send_push_notifications(
+    fcm_tokens,
+    title=f"Message from {sender_name}",
+    body=content[:100] + ("..." if len(content) > 100 else ""),
+    data={"team_id": str(team_id), "team_name": team_name, "type": "chat_message"}
+  )
 
 @app.route('/getMessages', methods=['GET'])
 @token_required
@@ -1090,7 +1094,6 @@ def register_token(current_user):
       401:
         description: User not authorized
     """
-    print("\n\n\n\n\nterazxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n\n\n")
     data = request.get_json()
     token = data.get('token')
     if not token:
@@ -1110,10 +1113,9 @@ def register_token(current_user):
     return jsonify({'message': 'FCM token registered or reactivated'}), 200
 
 
-@app.route('/device_token/<string:token>', methods=['PUT'])
+@app.route('/device_token', methods=['PUT'])
 @token_required
-def update_device_token(current_user, token):
-    print("terazxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx")
+def update_device_token(current_user):
     """
     Update FCM device token status (activate/deactivate)
     ---
@@ -1150,12 +1152,12 @@ def update_device_token(current_user, token):
     """
     data = request.get_json()
     is_active = data.get('is_active')
-
+    token = data.get('token')
     if is_active is None:
         return jsonify({'error': 'Missing is-active value'}), 400
     
     token_record = DeviceToken.query.filter_by(token=token, user_id=current_user.id).first()
-    
+   
     if not token_record:
         return jsonify({'error': 'Token not found'}), 404
     
@@ -1185,35 +1187,38 @@ def get_access_token():
     credentials.refresh(auth_req)
     return credentials.token
 
-def send_push_notifications(fcm_tokens, title, body, data=None):
-    access_token = get_access_token()
-    headers = {
-        'Authorization': f'Bearer {access_token}',
-        'Content-Type': 'application/json; UTF-8',
+def send_push_notifications(fcm_tokens, title, body, data=None,image_url=None):
+  access_token = get_access_token()
+  headers = {
+    'Authorization': f'Bearer {access_token}',
+    'Content-Type': 'application/json; UTF-8',
+  }
+
+  for token in fcm_tokens:
+    team_name = data.get("team_name", "Unknown Team") if data else "Unknown Team"
+   
+    payload = {
+      "message": {
+        "token": token,
+        "notification": {
+          "title": title,
+          "body": f"Team Name: {team_name}\n{body}",
+          "image": image_url if image_url else None
+        },
+        "data": {k: str(v) for k, v in (data or {}).items()}
+      }
     }
 
-    for token in fcm_tokens:
-        payload = {
-            "message": {
-                "token": token,
-                "notification": {
-                    "title": title,
-                    "body": body
-                },
-                "data": {k: str(v) for k, v in (data or {}).items()}
-            }
-        }
+    response = requests.post(
+      FCM_ENDPOINT,
+      headers=headers,
+      data=json.dumps(payload)
+    )
 
-        response = requests.post(
-            FCM_ENDPOINT,
-            headers=headers,
-            data=json.dumps(payload)
-        )
-
-        if response.status_code != 200:
-            print(f"Failed to send message to {token}: {response.text}")
-        else:
-            print(f"Notification sent to {token}")
+    if response.status_code != 200:
+      print(f"Failed to send message to {token}: {response.text}")
+    else:
+      print(f"Notification sent to {token}")
 
 @app.route('/modifyTaskStatus', methods=['PUT'])
 @token_required
