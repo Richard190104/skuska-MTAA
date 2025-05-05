@@ -10,12 +10,16 @@ import jwt
 import requests
 from functools import wraps
 from flasgger import Swagger
-import firebase_admin
-from firebase_admin import credentials, messaging
+import json
+import requests
+from google.oauth2 import service_account
+import google.auth.transport.requests
+
 import random
 import smtplib
 from email.mime.text import MIMEText
-
+SERVICE_ACCOUNT_FILE = 'mtaa-fe23c-firebase-adminsdk-fbsvc-375beb7dac.json'
+FCM_ENDPOINT = 'https://fcm.googleapis.com/v1/projects/mtaa-fe23c/messages:send'
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'm7u2p$9a1r!b#x@z&k8w'
 CORS(app)
@@ -45,9 +49,6 @@ swagger = Swagger(app, template=swagger_template)
 db = SQLAlchemy(app)
 
 socketio = SocketIO(app, cors_allowed_origins='*')
-# ahoj
-# cred = credentials.Certificate("mtaaprojekt-b3546464b2d5.json")
-# firebase_admin.initialize_app(cred)
 
 SMTP_EMAIL="jan2003porubsky@gmail.com"
 SMTP_PASSWORD="nszu ohwv wnks fpvr"
@@ -811,7 +812,7 @@ def handle_message(data):
     }, room=room)
 
     fcm_tokens = get_active_tokens_for_team(team_id, exclude_user_id=sender_id)
-    send_push_notification(
+    send_push_notifications(
         fcm_tokens,
         title=f"Message from {sender_name}",
         body=content[:100] + ("..." if len(content) > 100 else ""),
@@ -1089,10 +1090,9 @@ def register_token(current_user):
       401:
         description: User not authorized
     """
-
+    print("\n\n\n\n\nterazxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n\n\n")
     data = request.get_json()
     token = data.get('token')
-
     if not token:
         return jsonify({'error': 'Token is required'}), 400
     
@@ -1113,6 +1113,7 @@ def register_token(current_user):
 @app.route('/device_token/<string:token>', methods=['PUT'])
 @token_required
 def update_device_token(current_user, token):
+    print("terazxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx")
     """
     Update FCM device token status (activate/deactivate)
     ---
@@ -1154,7 +1155,7 @@ def update_device_token(current_user, token):
         return jsonify({'error': 'Missing is-active value'}), 400
     
     token_record = DeviceToken.query.filter_by(token=token, user_id=current_user.id).first()
-
+    
     if not token_record:
         return jsonify({'error': 'Token not found'}), 404
     
@@ -1175,36 +1176,44 @@ def get_active_tokens_for_team(team_id, exclude_user_id=None):
 
     return [row.token for row in query.all()]
 
-def send_push_notification(fcm_tokens, title, body, data=None):
-    if not fcm_tokens:
-        return
-
-    notification = messaging.Notification(
-        title=title,
-        body=body
+def get_access_token():
+    credentials = service_account.Credentials.from_service_account_file(
+        SERVICE_ACCOUNT_FILE,
+        scopes=["https://www.googleapis.com/auth/firebase.messaging"]
     )
+    auth_req = google.auth.transport.requests.Request()
+    credentials.refresh(auth_req)
+    return credentials.token
 
-    android_config = messaging.AndroidConfig(
-        priority='high',
-        notification=messaging.AndroidNotification(
-            sound='default'
+def send_push_notifications(fcm_tokens, title, body, data=None):
+    access_token = get_access_token()
+    headers = {
+        'Authorization': f'Bearer {access_token}',
+        'Content-Type': 'application/json; UTF-8',
+    }
+
+    for token in fcm_tokens:
+        payload = {
+            "message": {
+                "token": token,
+                "notification": {
+                    "title": title,
+                    "body": body
+                },
+                "data": {k: str(v) for k, v in (data or {}).items()}
+            }
+        }
+
+        response = requests.post(
+            FCM_ENDPOINT,
+            headers=headers,
+            data=json.dumps(payload)
         )
-    )
 
-    message = messaging.MulticastMessage(
-        tokens=fcm_tokens,
-        notification=notification,
-        data={k: str(v) for k, v in (data or {}).items()},
-        android=android_config,
-    )
-
-    response = messaging.send_multicast(message)
-
-    print(f"Successfully sent {response.success_count} messages, {response.failure_count} failed.")
-    if response.failure_count > 0:
-        for idx, resp in enumerate(response.responses):
-            if not resp.success:
-                print(f"Failure for token {fcm_tokens[idx]}: {resp.exception}")
+        if response.status_code != 200:
+            print(f"Failed to send message to {token}: {response.text}")
+        else:
+            print(f"Notification sent to {token}")
 
 @app.route('/modifyTaskStatus', methods=['PUT'])
 @token_required
