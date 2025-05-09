@@ -416,6 +416,7 @@ def create_team(current_user):
 
     for email in member_emails:
         user = User.query.filter_by(email=email).first()
+        print(email)
         if user:
             invitation = Invitation(team_id=new_team.id, user_id=user.id, status='pending')
             db.session.add(invitation)
@@ -423,7 +424,7 @@ def create_team(current_user):
             print(f"User with email {email} not found, skipping invitation.")
     db.session.commit()
 
-    return jsonify({"message": "Team created successfully!"}), 201
+    return jsonify({"message": "Team created successfully!","id": new_team.id}), 201
 
 @app.route('/getInvitations', methods=['GET'])
 @token_required
@@ -1676,6 +1677,51 @@ def get_user_tasks(current_user):
     })
 
   return jsonify(task_list), 200
+
+@app.route('/getUserInfo', methods=['GET'])
+@token_required
+def get_user_info(current_user):
+    """
+    Get information about a specific user
+    ---
+    tags:
+      - Users
+    security:
+      - Bearer: []
+    parameters:
+      - name: user_id
+        in: query
+        type: integer
+        required: true
+        description: ID of the user
+    responses:
+      200:
+        description: User information
+      400:
+        description: Missing user_id
+      404:
+        description: User not found
+      401:
+        description: Unauthorized
+    """
+    user_id = request.args.get('user_id', type=int)
+
+    if user_id is None:
+        return jsonify({"error": "user_id is required"}), 400
+
+    user = User.query.filter_by(id=user_id).first()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    user_info = {
+        "id": user.id,
+        "username": user.username,
+        "email": user.email,
+        "profile_picture": user.profile_picture.decode('utf-8') if user.profile_picture else None
+    }
+
+    return jsonify(user_info), 200
+
 
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=5000, debug=True)
