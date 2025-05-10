@@ -18,8 +18,8 @@ import google.auth.transport.requests
 import random
 import smtplib
 from email.mime.text import MIMEText
-SERVICE_ACCOUNT_FILE = 'mtaa-fe23c-firebase-adminsdk-fbsvc-375beb7dac.json'
-FCM_ENDPOINT = 'https://fcm.googleapis.com/v1/projects/mtaa-fe23c/messages:send'
+SERVICE_ACCOUNT_FILE = 'mtaa2-c6f5e-firebase-adminsdk-fbsvc-2af0600069.json'
+FCM_ENDPOINT = 'https://fcm.googleapis.com/v1/projects/mtaa2-c6f5e/messages:send'
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'm7u2p$9a1r!b#x@z&k8w'
 CORS(app)
@@ -674,7 +674,7 @@ def create_project(current_user):
     db.session.add(new_project)
     db.session.commit()
 
-    return jsonify({"message": "Project created successfully!"}), 201
+    return jsonify({"message": "Project created successfully!", "id": new_project.id}), 201
 
 @app.route('/getTeamMembers', methods=['GET'])
 @token_required
